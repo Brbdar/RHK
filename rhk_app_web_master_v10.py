@@ -3059,13 +3059,36 @@ def build_app():
 if __name__ == "__main__":
     import os
 
-    app, theme, css = build_app()
+    res = build_app()
 
-    app.launch(
+    # build_app() kann entweder Blocks oder (Blocks, theme, css) zurückgeben.
+    if isinstance(res, tuple):
+        app = res[0]
+        theme = res[1] if len(res) > 1 else None
+        css = res[2] if len(res) > 2 else None
+    else:
+        app = res
+        theme = None
+        css = None
+
+    launch_kwargs = dict(
         server_name="0.0.0.0",
         server_port=int(os.environ.get("PORT", 7860)),
         share=False,
         show_error=True,
     )
+
+    # Gradio 6+: theme/css gehören in launch(); ältere Versionen ignorieren ggf. unbekannte kwargs nicht.
+    try:
+        if theme is not None:
+            launch_kwargs["theme"] = theme
+        if css is not None:
+            launch_kwargs["css"] = css
+        app.launch(**launch_kwargs)
+    except TypeError:
+        # Fallback für Gradio-Versionen, die theme/css nicht akzeptieren
+        launch_kwargs.pop("theme", None)
+        launch_kwargs.pop("css", None)
+        app.launch(**launch_kwargs)
 
 
