@@ -1,4 +1,12 @@
-# Minimal requirements for the RHK Befundgenerator GUI + YAML TextDB
+# --- Core Web App ---
+gradio>=4.0
 
-gradio>=4.0.0
-PyYAML>=6.0
+# --- Numerik & Daten ---
+numpy>=1.23
+pandas>=1.5
+
+# --- Optional, aber empfohlen (stabilere Statistik & Scores) ---
+scipy>=1.9
+
+# --- Rendering / Utilities ---
+python-dateutil>=2.8
