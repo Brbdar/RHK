@@ -1,0 +1,4 @@
+# Minimal requirements for the RHK Befundgenerator GUI + YAML TextDB
+
+gradio>=4.0.0
+PyYAML>=6.0
