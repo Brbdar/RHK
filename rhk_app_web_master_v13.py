@@ -21,7 +21,7 @@ Dieses Tool ist eine Dokumentations‑/Formulierungshilfe. Es ersetzt keine ärz
 
 from __future__ import annotations
 
-APP_VERSION = "v14.0"
+APP_VERSION = "v14.1"
 
 import json
 import math
@@ -65,6 +65,44 @@ except Exception:
         raise
 
 DEFAULT_RULES = getattr(textdb, "DEFAULT_RULES", {})
+
+
+# ---------------------------
+# UI-Feldreihenfolge
+# (MUSS exakt zur Reihenfolge der Input-Komponenten in der Blocks-GUI passen)
+# ---------------------------
+UI_FIELDS = [
+    # Klinik/Labor
+    "last_name","first_name","birthdate","height_cm","weight_kg","bsa_m2","story",
+    "ph_known","ph_suspected","la_enlarged",
+    "inr","quick","crea","hst","ptt","plt","hb","crp","leuko",
+    "bnp_kind","bnp_value","congestive_organopathy",
+    "ltot_present","bga_rest_pO2","bga_rest_pCO2",
+    "virology_positive","immunology_positive",
+    "abdo_sono","portal_hypertension",
+    "ct_angio","ct_lae","ct_ild","ct_emphysema","ct_embolie","ct_mosaic","ct_coronarycalc",
+    "comorbidities","comorbidities_relevance",
+    "ph_meds_yesno","ph_meds_past_yesno","diuretics_yesno",
+    "ph_meds_which","ph_meds_since","other_meds",
+    "who_fc","syncope","sixmwd_m","ve_vco2","vo2max","sbp","egfr",
+    "hfpef_af","hfpef_htn_meds","hfpef_e_eprime","hfpef_pasp",
+    # RHK Ruhe
+    "mpap","pa_sys","pa_dia","pawp","rap","co","ci","pvr","svi","hr","svo2",
+    "svc_sat","ivc_sat","ra_sat","rv_sat","pa_sat",
+    # Belastung/Manöver
+    "exercise_done","exercise_ph","ex_mpap","ex_pa_sys","ex_pa_dia","ex_pawp","ex_co","ex_ci","ex_pvr","ex_hr","mpap_co_slope","pawp_co_slope",
+    "volume_done","volume_positive","volume_ml","volume_pre_pawp","volume_post_pawp",
+    "vaso_done","vaso_responder","ino_ppm","vaso_pre_mpap","vaso_post_mpap","vaso_pre_pvr","vaso_post_pvr",
+    # Lufu
+    "lufu_done","lufu_obstr","lufu_restr","lufu_diff","lufu_fev1","lufu_fvc","lufu_fev1_fvc","lufu_tlc","lufu_rv","lufu_dlco","lufu_summary",
+    # Echo/CMR
+    "echo_sprime","echo_ra_area","pericard_eff","pericard_eff_grade",
+    "cmr_rvesvi","cmr_svi","cmr_rvef",
+    # Verlauf/Abschluss
+    "prev_rhk_label","prev_rhk_course","prev_mpap","prev_pawp","prev_ci","prev_pvr",
+    "therapy_plan_sentence","anticoag_plan_sentence","followup_timing_desc","declined_item","study_sentence",
+    "modules",
+]
 
 
 def _rule_get(path: str, default=None):
