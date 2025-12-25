@@ -274,6 +274,24 @@ def calc_svi_ml_m2(ci: Optional[float], hr: Optional[float]) -> Optional[float]:
         return None
     return ci * 1000.0 / hr
 
+def calc_slope_mmhg_per_l_min(
+    p_rest: Optional[float],
+    co_rest: Optional[float],
+    p_peak: Optional[float],
+    co_peak: Optional[float],
+) -> Optional[float]:
+    """Slope = (P_peak - P_rest) / (CO_peak - CO_rest) in mmHg/(L/min)."""
+    if p_rest is None or co_rest is None or p_peak is None or co_peak is None:
+        return None
+    try:
+        delta_co = float(co_peak) - float(co_rest)
+        if abs(delta_co) < 1e-9:
+            return None
+        return (float(p_peak) - float(p_rest)) / delta_co
+    except Exception:
+        return None
+
+
 
 def calc_sprime_raai(
     sprime_cm_s: Optional[float],
@@ -1421,7 +1439,6 @@ class RHKReportGenerator:
         # Belastung
         # -------------------------
         exercise_done = bool(ex.get("exercise_done"))
-        exercise_pattern = classify_exercise_pattern(mpap_co_slope, pawp_co_slope) if exercise_done else None
 
         ex_spap = to_num(ex.get("pa_sys"))
         ex_dpap = to_num(ex.get("pa_dia"))
@@ -1442,8 +1459,16 @@ class RHKReportGenerator:
         if ex_pvr is None:
             ex_pvr = calc_pvr_wu(ex_mpap, ex_pawp, ex_co)
 
+        # Slopes: bevorzugt Eingabe; sonst aus Ruhe/Peak ableiten (wenn möglich)
         mpap_co_slope = to_num(ex.get("mpap_co_slope"))
         pawp_co_slope = to_num(ex.get("pawp_co_slope"))
+        if exercise_done:
+            if mpap_co_slope is None:
+                mpap_co_slope = calc_slope_mmhg_per_l_min(mpap, co, ex_mpap, ex_co)
+            if pawp_co_slope is None:
+                pawp_co_slope = calc_slope_mmhg_per_l_min(pawp, co, ex_pawp, ex_co)
+
+        exercise_pattern = classify_exercise_pattern(mpap_co_slope, pawp_co_slope) if exercise_done else None
 
         # Belastungs‑PH Heuristik (nur wenn angegeben oder ableitbar)
         exercise_ph = bool(ex.get("exercise_ph"))
@@ -1461,6 +1486,7 @@ class RHKReportGenerator:
                     adaptation_sentence = "Belastungsreaktion spricht für einen homeometrischen Adaptionstyp (ΔsPAP >30 mmHg bei nicht verschlechtertem CI)."
                 else:
                     adaptation_sentence = "Belastungsreaktion spricht eher für einen heterometrischen Adaptionstyp (ΔsPAP >30 mmHg bei schlechterem CI)."
+
 
         # -------------------------
         # Volumenchallenge
