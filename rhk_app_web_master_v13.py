@@ -21,6 +21,8 @@ Dieses Tool ist eine Dokumentations‑/Formulierungshilfe. Es ersetzt keine ärz
 
 from __future__ import annotations
 
+APP_VERSION = "v14.0"
+
 import json
 import math
 import os
@@ -92,7 +94,7 @@ def _rule_float(path: str, default: Optional[float] = None) -> Optional[float]:
 # Patienten‑Textdatenbank
 # ---------------------------
 patientdb = None
-for _mod in ("rhk_textdb_patient_v5", "rhk_textdb_patient_v4", "rhk_textdb_patient_v3", "rhk_textdb_patient_v2", "rhk_textdb_patient"):
+for _mod in ("rhk_textdb_patient_v6", "rhk_textdb_patient_v5", "rhk_textdb_patient_v4", "rhk_textdb_patient_v3", "rhk_textdb_patient_v2", "rhk_textdb_patient"):
     try:
         patientdb = __import__(_mod, fromlist=["get_patient_block"])
         break
@@ -273,24 +275,6 @@ def calc_svi_ml_m2(ci: Optional[float], hr: Optional[float]) -> Optional[float]:
     if ci is None or hr is None or hr <= 0:
         return None
     return ci * 1000.0 / hr
-
-def calc_slope_mmhg_per_l_min(
-    p_rest: Optional[float],
-    co_rest: Optional[float],
-    p_peak: Optional[float],
-    co_peak: Optional[float],
-) -> Optional[float]:
-    """Slope = (P_peak - P_rest) / (CO_peak - CO_rest) in mmHg/(L/min)."""
-    if p_rest is None or co_rest is None or p_peak is None or co_peak is None:
-        return None
-    try:
-        delta_co = float(co_peak) - float(co_rest)
-        if abs(delta_co) < 1e-9:
-            return None
-        return (float(p_peak) - float(p_rest)) / delta_co
-    except Exception:
-        return None
-
 
 
 def calc_sprime_raai(
@@ -944,6 +928,42 @@ class SafeDict(dict):
     def __missing__(self, key: str) -> str:
         return ""
 
+def render_sticky_bar_html(heading: str, subheading: str, chips: List[Tuple[str, str, str]], note: str = "") -> str:
+    """Compact, always-visible summary bar (HTML) shown at top of the UI."""
+
+    def level_style(level: str) -> str:
+        s = (level or "").lower()
+
+        # Allow passing either a normalized category ("low") or the human label ("Intermediär‑niedrig").
+        if any(x in s for x in ("low", "nied")):
+            return "background:#ecfdf5;border:1px solid #10b981;color:#065f46;"
+        if any(x in s for x in ("high", "hoch")):
+            return "background:#fef2f2;border:1px solid #ef4444;color:#991b1b;"
+        if any(x in s for x in ("inter", "mittel")):
+            return "background:#fffbeb;border:1px solid #f59e0b;color:#92400e;"
+
+        return "background:#f3f4f6;border:1px solid #d1d5db;color:#374151;"
+
+    chip_html = "".join(
+        [
+            f"<span class='rhk-chip' style='{level_style(level)}'>{label}: <b>{value}</b></span>"
+            for (label, value, level) in (chips or [])
+            if (label and value)
+        ]
+    )
+
+    note_html = f"<div class='rhk-sticky-note'>{note}</div>" if note else ""
+
+    return (
+        "<div class='rhk-sticky-inner'>"
+        f"<div class='rhk-sticky-head'><div class='rhk-sticky-h'>{heading}</div><div class='rhk-sticky-sub'>{subheading}</div></div>"
+        f"<div class='rhk-sticky-chips'>{chip_html}</div>"
+        f"{note_html}"
+        "</div>"
+    )
+
+
+
 
 def get_block(block_id: str):
     try:
@@ -1025,6 +1045,11 @@ _PATIENT_REPLACEMENTS = {
     "ggf.": "wenn nötig",
     "z.B.": "zum Beispiel",
     "bzw.": "oder",
+    "NYHA/WHO-FC": "Belastungsklasse",
+    "NYHA/WHO‑FC": "Belastungsklasse",
+    "NYHA": "Belastungsklasse",
+    "WHO-FC": "Belastungsklasse",
+    "WHO‑FC": "Belastungsklasse",
 }
 
 def patient_clean_text(text: str) -> str:
@@ -1347,7 +1372,7 @@ class RHKReportGenerator:
     def __init__(self) -> None:
         pass
 
-    def generate_all(self, data: Dict[str, Any]) -> Tuple[str, str, str, str]:
+    def generate_all(self, data: Dict[str, Any]) -> Tuple[str, str, str, str, str]:
         """
         Returns:
         - main_report (ärztlich)
@@ -1459,14 +1484,8 @@ class RHKReportGenerator:
         if ex_pvr is None:
             ex_pvr = calc_pvr_wu(ex_mpap, ex_pawp, ex_co)
 
-        # Slopes: bevorzugt Eingabe; sonst aus Ruhe/Peak ableiten (wenn möglich)
         mpap_co_slope = to_num(ex.get("mpap_co_slope"))
         pawp_co_slope = to_num(ex.get("pawp_co_slope"))
-        if exercise_done:
-            if mpap_co_slope is None:
-                mpap_co_slope = calc_slope_mmhg_per_l_min(mpap, co, ex_mpap, ex_co)
-            if pawp_co_slope is None:
-                pawp_co_slope = calc_slope_mmhg_per_l_min(pawp, co, ex_pawp, ex_co)
 
         exercise_pattern = classify_exercise_pattern(mpap_co_slope, pawp_co_slope) if exercise_done else None
 
@@ -1486,7 +1505,6 @@ class RHKReportGenerator:
                     adaptation_sentence = "Belastungsreaktion spricht für einen homeometrischen Adaptionstyp (ΔsPAP >30 mmHg bei nicht verschlechtertem CI)."
                 else:
                     adaptation_sentence = "Belastungsreaktion spricht eher für einen heterometrischen Adaptionstyp (ΔsPAP >30 mmHg bei schlechterem CI)."
-
 
         # -------------------------
         # Volumenchallenge
@@ -1567,7 +1585,7 @@ class RHKReportGenerator:
         reveal = reveal_lite2_score(who_fc=who_fc, sixmwd_m=sixmwd, bnp_kind=bnp_kind, bnp_value=bnp_value, sbp=sbp, hr=hr, egfr=egfr)
         risk_html = render_risk_html(esc3_ext, esc4, reveal, hfpef_res)
 
-        # Plain risk summary for report
+                # Plain risk summary for report
         risk_plain = ""
         if esc3_ext:
             risk_plain += f"ESC/ERS 3‑Strata (erweitert): {esc3_ext.label}. "
@@ -1624,7 +1642,7 @@ class RHKReportGenerator:
             dash_lines.append("Postkapilläre pulmonale Hypertonie: isoliert (IpcPH).")
         elif ph_type == "cpcph":
             dash_lines.append("Kombinierte post- und präkapilläre pulmonale Hypertonie (CpcPH).")
-        elif ph_type == "postcap":
+        elif ph_type in ("ipcph", "postcap"):
             dash_lines.append("Postkapilläre pulmonale Hypertonie (PVR nicht angegeben).")
         elif ph_type == "ph_unbekannt":
             dash_lines.append("PH in Ruhe, aber PAWP/PVR unvollständig – Einordnung derzeit nicht sicher.")
@@ -2006,175 +2024,220 @@ class RHKReportGenerator:
         main_report = "\n".join(main_parts).strip()
 
         # -------------------------
-        # Patienten‑Info (ausführlicher, einfache Sprache)
+        
         # -------------------------
-        patient_name = join_nonempty([patient.get("first_name") or "", patient.get("last_name") or ""]).strip()
-        patient_header = "PATIENTEN‑INFORMATION (EINFACHE SPRACHE)"
+        # Patienten‑Info (sehr einfache Sprache, ausführlicher)
+        # -------------------------
+        patient_paras: List[str] = []
+
+        ph_present = (ph_type not in ("keine_ph", "unbekannt"))
+
+        # Optional: Name/Anamnese (nur wenn vorhanden)
+        patient_name = join_nonempty([patient.get("first_name"), patient.get("last_name")], " ").strip()
+        story = patient_clean_text(patient.get("story") or "").strip()
+
         if patient_name:
-            patient_header += f" – {patient_name}"
+            patient_paras.append(f"Patientenbericht für {patient_name}.")
+        if story:
+            patient_paras.append(f"Kurz zur Vorgeschichte: {story}")
 
-        # Sehr einfache Diagnose‑Sätze
-        if ph_type == "keine_ph":
-            patient_dx_short = "Kein Hinweis auf Lungenhochdruck in Ruhe."
-            patient_dx_long = (
-                "Die Messwerte sprechen in Ruhe nicht für einen Lungenhochdruck. "
-                "Das ist beruhigend. Wenn Sie trotzdem Beschwerden haben, suchen wir nach anderen Ursachen."
-            )
-        elif ph_type.startswith("precap"):
-            patient_dx_short = "Hinweise auf Lungenhochdruck."
-            patient_dx_long = (
-                "Die Drücke in den Gefäßen der Lunge sind erhöht. "
-                "Der Druck am linken Herzen ist dabei nicht erhöht. "
-                "Das passt zu einem Lungenhochdruck, der in den Lungengefäßen entsteht."
-            )
-        elif ph_type in ("ipcph", "postcap"):
-            patient_dx_short = "Hinweise auf Lungenhochdruck, wahrscheinlich vom linken Herzen her."
-            patient_dx_long = (
-                "Die Drücke in der Lunge sind erhöht. "
-                "Der Druck am linken Herzen ist ebenfalls erhöht. "
-                "Das passt dazu, dass das linke Herz eine wichtige Rolle spielt."
-            )
-        elif ph_type == "cpcph":
-            patient_dx_short = "Hinweise auf Lungenhochdruck."
-            patient_dx_long = (
-                "Die Drücke in der Lunge sind erhöht. "
-                "Es gibt Zeichen für zwei Anteile: vom linken Herzen und von den Lungengefäßen."
-            )
-        else:
-            patient_dx_short = "Hinweise auf Lungenhochdruck (Einordnung noch nicht sicher)."
-            patient_dx_long = (
-                "Einige Werte sprechen für Lungenhochdruck. "
-                "Für die genaue Einordnung fehlen aber noch Daten oder es sind Werte grenzwertig."
-            )
-
-        # ------------------------------------------------------------------
-        # Patienten-Text: sehr einfache Sprache
-        # - ohne Messwerte/Abkürzungen
-        # - etwas ausführlicher (damit Patient:innen den Befund einordnen können)
-        # ------------------------------------------------------------------
-        patient_lines: List[str] = [patient_header, ""]
-
-        patient_lines.append("Dieser Text erklärt die Untersuchung und den Befund in einfachen Worten.")
-        patient_lines.append("Er ersetzt nicht das persönliche Gespräch mit dem Behandlungsteam.")
-        patient_lines.append("")
-
-        patient_lines.append("Was wurde untersucht?")
-        patient_lines.append(
-            "Bei der Untersuchung wurde über eine Vene ein dünner Schlauch bis zum Herzen vorgeschoben. "
-            "So können wir den Blutfluss und die Druckverhältnisse in Herz und Lunge direkt beurteilen."
-        )
-        patient_lines.append("")
-
-        patient_lines.append("Was kam heraus?")
-        if patient_dx_short:
-            patient_lines.append(patient_dx_short)
-        if patient_dx_long:
-            patient_lines.append(patient_dx_long)
-
-        # qualitative Einordnung (ohne Zahlen)
-        sev_word = None
-        if ph_type in ("precap", "postcap", "cpcph"):
-            if pvr_label == "mild erhöht":
-                sev_word = "eher leicht ausgeprägt"
-            elif pvr_label == "moderat erhöht":
-                sev_word = "eher mittel ausgeprägt"
-            elif pvr_label == "deutlich erhöht":
-                sev_word = "eher deutlich ausgeprägt"
-        if sev_word:
-            patient_lines.append(f"Die Ausprägung wirkt {sev_word}.")
-
+        # Was wurde gemacht?
+        exam_parts = ["in Ruhe"]
         if exercise_done:
-            patient_lines.append(
-                "Es liegen auch Messungen unter körperlicher Belastung vor. "
-                "Das zeigt uns, wie sich Herz und Lunge bei Anstrengung verhalten."
-            )
+            exam_parts.append("unter Belastung")
+        if volume_done:
+            exam_parts.append("nach Gabe von Flüssigkeit")
 
-        if has_stepup:
-            patient_lines.append(
-                "In den Sauerstoffmessungen während der Untersuchung gab es Hinweise auf einen möglichen Kurzschluss "
-                "zwischen Herzbereichen oder großen Gefäßen. Das klären wir mit weiteren Untersuchungen."
-            )
-
-        hf_cat = None
-        hf_score = None
-        if hfpef_res:
-            if isinstance(hfpef_res, dict):
-                hf_cat = hfpef_res.get("category")
-                hf_score = hfpef_res.get("score")
-            else:
-                hf_cat = getattr(hfpef_res, "category", None)
-                hf_score = getattr(hfpef_res, "score", None)
-
-        hfpef_flag = False
-        if hf_cat in ("mittlere Wahrscheinlichkeit", "hohe Wahrscheinlichkeit", "possible", "likely"):
-            hfpef_flag = True
-        elif isinstance(hf_score, int) and hf_score >= 2:
-            hfpef_flag = True
-
-        if hfpef_flag:
-            patient_lines.append(
-                "Es gibt außerdem Hinweise, dass das linke Herz sich möglicherweise nicht gut entspannen kann. "
-                "Das kann Luftnot besonders bei Belastung verstärken."
-            )
-
-        patient_lines.append("")
-        patient_lines.append("Was bedeutet das für Sie?")
-        if ph_type == "keine_ph":
-            patient_lines.append(
-                "In Ruhe sehen wir keinen Hinweis auf Lungenhochdruck. "
-                "Wenn Sie trotzdem Beschwerden haben, suchen wir gemeinsam nach anderen Ursachen."
-            )
-        else:
-            patient_lines.append(
-                "Lungenhochdruck bedeutet, dass das Herz gegen einen höheren Druck in den Gefäßen der Lunge anpumpen muss. "
-                "Das kann zu Luftnot, schneller Erschöpfung oder Wassereinlagerungen führen."
-            )
-        patient_lines.append(
-            "Wichtig: Die Ursache kann unterschiedlich sein. Deshalb betrachten wir die Messwerte immer zusammen mit "
-            "Ihrer Vorgeschichte und weiteren Untersuchungen."
+        patient_paras.append(
+            "Was wurde untersucht: "
+            "Bei Ihnen wurde ein Rechtsherzkatheter durchgeführt. Dabei werden mit einem dünnen Schlauch "
+            "Druck- und Flusswerte am Herzen und in den Lungengefäßen gemessen. "
+            f"Die Messungen wurden {join_nonempty(exam_parts, ', ')} durchgeführt."
         )
 
-        patient_lines.append("")
-        patient_lines.append("Wie geht es weiter?")
-        patient_lines.append("Die nächsten Schritte richten sich nach dem Gesamtbild. Häufig gehören dazu:")
-
-        # Empfehlungen aus den ausgewählten Modulen (in Patientensprache)
-        patient_proc_lines: List[str] = []
-        for bid in all_ids:
-            t = safe_render_patient(bid, ctx)
-            t = patient_clean_text(t)
-            if t and t not in patient_proc_lines:
-                patient_proc_lines.append(f"- {t}")
-        if patient_proc_lines:
-            patient_lines.extend(patient_proc_lines)
+        # Ergebnis in einfacher Sprache (ohne Zahlen/Abkürzungen)
+        if not ph_present and not exercise_done:
+            result_para = (
+                "Ergebnis: Die Messwerte sprechen aktuell nicht für einen Lungenhochdruck."
+            )
+        elif not ph_present and exercise_done:
+            if exercise_ph and exercise_pattern == "pulmonary_vascular":
+                result_para = (
+                    "Ergebnis: In Ruhe waren die Werte unauffällig. "
+                    "Unter Belastung zeigte sich aber eine auffällige Reaktion der Lungengefäße. "
+                    "Das kann ein frühes Zeichen für eine Belastungs‑Problematik sein."
+                )
+            elif exercise_ph and exercise_pattern == "left_heart":
+                result_para = (
+                    "Ergebnis: In Ruhe waren die Werte unauffällig. "
+                    "Unter Belastung zeigte sich aber ein Rückstau, der eher vom linken Herzen ausgehen kann. "
+                    "Das passt zum Beispiel zu einer Herzschwäche mit erhaltener Pumpfunktion."
+                )
+            else:
+                result_para = (
+                    "Ergebnis: In Ruhe waren die Werte unauffällig. "
+                    "Unter Belastung gab es Hinweise auf eine grenzwertige oder auffällige Reaktion. "
+                    "Das wird zusammen mit anderen Untersuchungen eingeordnet."
+                )
         else:
-            patient_lines.extend([
-                "- weitere Untersuchungen von Herz und Lunge, je nach Beschwerden",
-                "- Besprechung der Ergebnisse und des Plans im Team",
-            ])
+            # PH in Ruhe vorhanden
+            if ph_type in ("precap", "precap_pvr_niedrig"):
+                result_para = (
+                    "Ergebnis: Es liegt ein Lungenhochdruck vor. "
+                    "Die Messung spricht eher dafür, dass die Ursache in den Lungengefäßen selbst liegt."
+                )
+            elif ph_type == "postcap":
+                result_para = (
+                    "Ergebnis: Es liegt ein Lungenhochdruck vor. "
+                    "Die Messung spricht eher für einen Rückstau, der vom linken Herzen ausgehen kann."
+                )
+            elif ph_type == "cpcph":
+                result_para = (
+                    "Ergebnis: Es liegt ein Lungenhochdruck vor. "
+                    "Dabei sprechen die Werte sowohl für einen Rückstau vom linken Herzen als auch für eine zusätzliche Belastung der Lungengefäße."
+                )
+            else:
+                result_para = (
+                    "Ergebnis: Es liegt ein Lungenhochdruck vor. "
+                    "Die genaue Einordnung hängt von der Gesamtsituation und weiteren Befunden ab."
+                )
 
-        patient_lines.append("")
-        patient_lines.append("Was können Sie selbst tun?")
-        patient_lines.extend([
-            "- Nehmen Sie Ihre Medikamente so ein, wie es vereinbart wurde.",
-            "- Achten Sie auf Schwellungen an den Beinen und auf schnelle Gewichtszunahme.",
-            "- Bleiben Sie im Rahmen Ihrer Möglichkeiten in Bewegung, ohne sich zu überlasten.",
-            "- Wenn Ihnen Sauerstoff verordnet wurde, nutzen Sie ihn wie besprochen.",
-        ])
+        # Schweregrad (patientenverständlich)
+        if ph_present and pvr_label:
+            sev_text = (pvr_label or "").lower()
+            sev_plain = ""
+            if "mild" in sev_text:
+                sev_plain = "leicht"
+            elif "moderat" in sev_text:
+                sev_plain = "mittel"
+            elif "deutlich" in sev_text:
+                sev_plain = "ausgeprägt"
+            elif "nicht" in sev_text:
+                sev_plain = "nur gering"
 
-        patient_lines.append("")
-        patient_lines.append("Wann sollten Sie sich rasch melden?")
-        patient_lines.extend([
-            "- wenn die Luftnot deutlich zunimmt",
-            "- wenn Ohnmacht auftritt",
-            "- wenn neue starke Brustschmerzen auftreten",
-            "- wenn Schwellungen rasch zunehmen",
-        ])
+            if sev_plain:
+                result_para += f" Insgesamt wirkt der Befund {sev_plain} ausgeprägt."
 
-        patient_lines.append("")
-        patient_lines.append("Wenn Sie unsicher sind, melden Sie sich bitte bei Ihrer behandelnden Praxis oder in der Klinik.")
+        patient_paras.append(result_para)
 
-        patient_report = "\n".join(patient_lines).strip()
+        # Einordnung / was bedeutet das?
+        meaning_lines: List[str] = []
+        meaning_lines.append(
+            "Was bedeutet das: Lungenhochdruck kann das rechte Herz belasten. "
+            "Je nachdem, wo die Ursache liegt, unterscheiden sich Diagnostik und Behandlung."
+        )
+
+        group_hint = ""
+        if group_hints:
+            joined = " ".join(group_hints)
+            if "Group II" in joined:
+                group_hint = "Group II"
+            elif "Group III" in joined:
+                group_hint = "Group III"
+            elif "Group IV" in joined:
+                group_hint = "Group IV"
+
+        if group_hint:
+            if group_hint == "Group II":
+                meaning_lines.append(
+                    "In Ihrem Befund gibt es Hinweise, dass das linke Herz eine wichtige Rolle spielt. "
+                    "Dann stehen oft Blutdruck, Rhythmus, Klappen und das Flüssigkeits‑Management im Vordergrund."
+                )
+            elif group_hint == "Group III":
+                meaning_lines.append(
+                    "In Ihrem Befund gibt es Hinweise, dass eine Lungenerkrankung bzw. Sauerstoff‑Probleme mitbeteiligt sein können. "
+                    "Dann sind Lungenfunktion, Bildgebung und ggf. eine Sauerstoff‑Therapie besonders wichtig."
+                )
+            elif group_hint == "Group IV":
+                meaning_lines.append(
+                    "In Ihrem Befund gibt es Hinweise, dass frühere oder aktuelle Blutgerinnsel in der Lunge eine Rolle spielen könnten. "
+                    "Dann sind spezielle Untersuchungen der Lungendurchblutung wichtig."
+                )
+
+        if hfpef_res is not None:
+            # hfpef_res kann Dict oder Objekt sein – wir greifen defensiv zu
+            hf_cat = getattr(hfpef_res, "category", None)
+            if not hf_cat and isinstance(hfpef_res, dict):
+                hf_cat = hfpef_res.get("category")
+            if hf_cat in ("possible", "likely"):
+                meaning_lines.append(
+                    "Zusatzhinweis: Aus Ihren Angaben ergeben sich Hinweise, die zu einer sogenannten diastolischen Funktionsstörung passen können "
+                    "(eine Form der Herzschwäche, bei der das Herz sich schlechter entspannt). "
+                    "Das sollte kardiologisch mitbeurteilt werden."
+                )
+
+        patient_paras.append(" ".join(meaning_lines))
+
+        # Risiko (sehr einfach, ohne Score‑Namen)
+        def _worst_risk_category_from_labels(labels: List[str]) -> str:
+            labels = [(l or "").lower() for l in labels if l]
+            if any(("hoch" in l) or ("high" in l) for l in labels):
+                return "high"
+            if any(("inter" in l) or ("mittel" in l) for l in labels):
+                return "intermediate"
+            if any(("nied" in l) or ("low" in l) for l in labels):
+                return "low"
+            return ""
+
+        risk_labels: List[str] = []
+        for rr in (esc3_ext, esc4, reveal):
+            if rr is not None:
+                risk_labels.append(getattr(rr, "label", "") or "")
+        worst = _worst_risk_category_from_labels(risk_labels)
+
+        if worst:
+            risk_plain = {"low": "niedrig", "intermediate": "mittel", "high": "hoch"}.get(worst, "")
+            if risk_plain:
+                patient_paras.append(
+                    "Risikoeinschätzung: Ärztinnen und Ärzte ordnen den Befund oft in ein Risiko ein, "
+                    "um die Behandlung zu planen. Nach den vorliegenden Angaben liegt Ihr Risiko aktuell eher im Bereich "
+                    f"{risk_plain}. "
+                    "Das wird immer zusammen mit Ihrem Befinden und weiteren Untersuchungen beurteilt."
+                )
+
+        # Nächste Schritte / Empfehlungen (patientenfreundlich)
+        rec_items: List[str] = []
+        ctx_patient = {
+            "patient": patient,
+            "rhk": {"rest": rest, "exercise": ex, "manoeuvres": man, "additional": add},
+            "rest": rest,
+            "exercise": ex,
+            "add": add,
+        }
+        for pid in all_ids:
+            t = safe_render_patient(pid, ctx_patient)
+            t = patient_clean_text(t).strip()
+            if t:
+                rec_items.append(t)
+
+        if rec_items:
+            patient_paras.append(
+                "Wie geht es weiter: "
+                "Je nach Gesamtsituation empfehlen wir als nächste Schritte unter anderem:\n"
+                + "\n".join([f"• {x}" for x in rec_items])
+            )
+        else:
+            patient_paras.append(
+                "Wie geht es weiter: Das weitere Vorgehen richtet sich nach Ihren Beschwerden und den Begleitbefunden. "
+                "Oft sind Kontrollen beim Herz‑ und/oder Lungen‑Facharzt sinnvoll."
+            )
+
+        # Was Sie selbst tun können
+        patient_paras.append(
+            "Was Sie selbst tun können: "
+            "Achten Sie auf regelmäßige Bewegung im Rahmen Ihrer Möglichkeiten, "
+            "nehmen Sie Medikamente wie verordnet ein und sprechen Sie mit Ihrem Behandlungsteam über Salz‑/Flüssigkeits‑Themen, "
+            "wenn Wasseransammlungen oder Luftnot bestehen. "
+            "Bei Rauchen: Aufhören hilft dem Herzen und der Lunge."
+        )
+
+        # Warnzeichen
+        patient_paras.append(
+            "Wichtig: Bitte suchen Sie zeitnah ärztliche Hilfe, wenn sich Luftnot rasch verschlechtert, "
+            "wenn Sie Ohnmachtsanfälle haben, starke Brustschmerzen auftreten oder wenn Beine/Bauch deutlich anschwellen."
+        )
+
+        patient_report = "\n\n".join([p.strip() for p in patient_paras if p.strip()])
 
         # -------------------------
         # Internal log
@@ -2204,7 +2267,57 @@ class RHKReportGenerator:
 
         internal_report = "\n".join(internal_lines).strip()
 
-        return main_report, patient_report, internal_report, risk_html
+
+        # Sticky Summary (für die immer sichtbare Kopfzeile)
+        ph_present = (ph_type not in ("keine_ph", "unbekannt"))
+        setting_desc = "Ruhe"
+        if exercise_done:
+            setting_desc = "Ruhe + Belastung"
+        if volume_done:
+            setting_desc = "Ruhe + Flüssigkeit"
+
+        ph_type_plain = {
+            "keine_ph": "keine PH",
+            "precap": "präkapillär",
+            "precap_pvr_niedrig": "präkapillär (Widerstand nicht erhöht)",
+            "ipcph": "postkapillär (linkes Herz)",
+            "postcap": "postkapillär (linkes Herz)",
+            "cpcph": "kombiniert (linkes Herz + Lungengefäße)",
+            "ph_unbekannt": "PH – Typ unklar",
+            "unbekannt": "unklar",
+        }.get(ph_type or "unbekannt", "unklar")
+
+        chips: List[Tuple[str, str, str]] = []
+        chips.append(("Setting", setting_desc, "neutral"))
+
+        if ph_present:
+            chips.append(("PH‑Typ", ph_type_plain, "neutral"))
+            pvr_label_local = (pvr_severity_label(pvr) or "").strip()
+            if pvr_label_local:
+                chips.append(("Gefäßwiderstand", pvr_label_local, "neutral"))
+        else:
+            chips.append(("PH‑Typ", ph_type_plain, "neutral"))
+
+        if esc3_ext:
+            chips.append(("ESC‑3‑Strata", esc3_ext.label, esc3_ext.label))
+        if esc4:
+            chips.append(("ESC‑4‑Strata", esc4.label, esc4.label))
+        if reveal:
+            chips.append(("REVEAL", reveal.label, reveal.label))
+
+        hf_cat = getattr(hfpef_res, "category", None) if hfpef_res is not None else None
+        if not hf_cat and isinstance(hfpef_res, dict):
+            hf_cat = hfpef_res.get("category")
+        if hf_cat in ("possible", "likely"):
+            chips.append(("HFpEF‑Hinweis", "möglich" if hf_cat == "possible" else "wahrscheinlich", "intermediate"))
+
+        note = ""
+
+        sticky_summary = " | ".join([x for x in (dash_lines[:2] if isinstance(dash_lines, list) else []) if x])
+
+        sticky_html = render_sticky_bar_html("Befundübersicht", sticky_summary, chips, note=note)
+
+        return main_report, patient_report, internal_report, risk_html, sticky_html
 
 
 # ---------------------------
@@ -2570,7 +2683,61 @@ def build_blocks_app():
     }
     .rhk-card .prose {max-width: none;}
     .rhk-muted {opacity: 0.85;}
-    """
+    
+    /* Sticky top bar */
+    .rhk-sticky {
+        position: sticky;
+        top: 0;
+        z-index: 50;
+        background: rgba(255,255,255,0.92);
+        backdrop-filter: blur(10px);
+        padding: 10px 0 6px 0;
+        border-bottom: 1px solid rgba(0,0,0,0.08);
+    }
+    .rhk-sticky-inner {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+    .rhk-sticky-head {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+    }
+    .rhk-sticky-h {
+        font-weight: 700;
+        font-size: 0.95rem;
+        line-height: 1.1;
+    }
+    .rhk-sticky-sub {
+        font-size: 0.9rem;
+        opacity: 0.9;
+        line-height: 1.25;
+    }
+    .rhk-sticky-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+    .rhk-chip {
+        display: inline-block;
+        padding: 4px 8px;
+        border-radius: 999px;
+        font-size: 0.82rem;
+        line-height: 1.1;
+        white-space: nowrap;
+    }
+    .rhk-sticky-note {
+        font-size: 0.82rem;
+        opacity: 0.75;
+    }
+
+    /* Keep dashboard visible while scrolling results */
+    .rhk-dashboard-sticky {
+        position: sticky;
+        top: 110px;
+    }
+"""
 
     with gr.Blocks(css=css, title="RHK Befundassistent") as demo:
         gr.Markdown(
@@ -2582,9 +2749,20 @@ Strukturierte Eingabe → **Befund**, **Patienten‑Info (einfache Sprache)** un
 """
         )
 
-        with gr.Row():
-            example_btn_top = gr.Button("Beispiel laden", variant="secondary")
-            generate_btn_top = gr.Button("Befund erstellen", variant="primary")
+        initial_sticky = render_sticky_bar_html(
+            "Befundübersicht",
+            "Noch kein Befund erstellt. Bitte Werte eingeben und dann 'Befund erstellen' klicken.",
+            [],
+            note="",
+        )
+        with gr.Group(elem_classes="rhk-sticky"):
+            with gr.Row():
+                with gr.Column(scale=6):
+                    sticky_out = gr.HTML(value=initial_sticky)
+                with gr.Column(scale=2, min_width=260):
+                    with gr.Row():
+                        example_btn_top = gr.Button("Beispiel laden", variant="secondary")
+                        generate_btn_top = gr.Button("Befund erstellen", variant="primary")
         gr.Markdown("---")
 
         # -------------------------
@@ -2858,62 +3036,27 @@ Strukturierte Eingabe → **Befund**, **Patienten‑Info (einfache Sprache)** un
         # -------------------------
         gr.Markdown("---")
 
-        with gr.Group(elem_classes="rhk-card"):
-            gr.Markdown("### Dashboard (Diagnose & Risiko)")
-            risk_out = gr.HTML(value="<div class='muted'>Noch kein Befund erstellt. Bitte oben oder unten auf <b>Befund erstellen</b> klicken.</div>")
+        # -------------------------
+        # Ergebnisse (Befund + Dashboard)
+        # -------------------------
+        gr.Markdown("### Ergebnisse")
 
-        with gr.Tabs():
-            with gr.Tab("Ärztlicher Befund"):
-                main_out = gr.Textbox(label="Befund (copy‑ready)", lines=26)
-            with gr.Tab("Patienten‑Info"):
-                patient_out = gr.Textbox(label="Patienten‑Information (einfache Sprache)", lines=44)
-            with gr.Tab("Interner Log"):
-                internal_out = gr.Textbox(label="Interner Log (nur intern)", lines=16)
+        with gr.Row():
+            with gr.Column(scale=2):
+                with gr.Tabs():
+                    with gr.Tab("Befund (ärztlich)"):
+                        main_out = gr.Textbox(label="Ärztlicher Befund", lines=28, interactive=False)
+                    with gr.Tab("Patientenbericht (sehr einfache Sprache)"):
+                        patient_out = gr.Textbox(label="Patientenbericht", lines=28, interactive=False)
+                    with gr.Tab("Intern (Logik / Debug)"):
+                        internal_out = gr.Textbox(label="Intern", lines=28, interactive=False)
 
-
-        # Helper: convert selected labels back to IDs
-        def _labels_to_ids(labels: List[str]) -> List[str]:
-            ids = []
-            for lab in labels or []:
-                bid = str(lab).split("–")[0].strip()
-                if bid and bid not in ids:
-                    ids.append(bid)
-            return ids
-
-        # UI_FIELDS order (must match components list below)
-        global UI_FIELDS
-        UI_FIELDS = [
-            # Klinik/Labor
-            "last_name","first_name","birthdate","height_cm","weight_kg","bsa_m2","story",
-            "ph_known","ph_suspected","la_enlarged",
-            "inr","quick","crea","hst","ptt","plt","hb","crp","leuko",
-            "bnp_kind","bnp_value","congestive_organopathy",
-            "ltot_present","bga_rest_pO2","bga_rest_pCO2",
-            "virology_positive","immunology_positive",
-            "abdo_sono","portal_hypertension",
-            "ct_angio","ct_lae","ct_ild","ct_emphysema","ct_embolie","ct_mosaic","ct_coronarycalc",
-            "comorbidities","comorbidities_relevance",
-            "ph_meds_yesno","ph_meds_past_yesno","diuretics_yesno",
-            "ph_meds_which","ph_meds_since","other_meds",
-            "who_fc","syncope","sixmwd_m","ve_vco2","vo2max","sbp","egfr",
-            "hfpef_af","hfpef_htn_meds","hfpef_e_eprime","hfpef_pasp",
-            # RHK Ruhe
-            "mpap","pa_sys","pa_dia","pawp","rap","co","ci","pvr","svi","hr","svo2",
-            "svc_sat","ivc_sat","ra_sat","rv_sat","pa_sat",
-            # Belastung/Manöver
-            "exercise_done","exercise_ph","ex_mpap","ex_pa_sys","ex_pa_dia","ex_pawp","ex_co","ex_ci","ex_pvr","ex_hr","mpap_co_slope","pawp_co_slope",
-            "volume_done","volume_positive","volume_ml","volume_pre_pawp","volume_post_pawp",
-            "vaso_done","vaso_responder","ino_ppm","vaso_pre_mpap","vaso_post_mpap","vaso_pre_pvr","vaso_post_pvr",
-            # Lufu
-            "lufu_done","lufu_obstr","lufu_restr","lufu_diff","lufu_fev1","lufu_fvc","lufu_fev1_fvc","lufu_tlc","lufu_rv","lufu_dlco","lufu_summary",
-            # Echo/CMR
-            "echo_sprime","echo_ra_area","pericard_eff","pericard_eff_grade",
-            "cmr_rvesvi","cmr_svi","cmr_rvef",
-            # Verlauf/Abschluss
-            "prev_rhk_label","prev_rhk_course","prev_mpap","prev_pawp","prev_ci","prev_pvr",
-            "therapy_plan_sentence","anticoag_plan_sentence","followup_timing_desc","declined_item","study_sentence",
-            "modules",
-        ]
+            with gr.Column(scale=1, min_width=380):
+                with gr.Group(elem_classes="rhk-card rhk-dashboard-sticky"):
+                    gr.Markdown("### Dashboard / Scores (immer sichtbar)")
+                    risk_out = gr.HTML(
+                        value="<div class='muted'>Noch kein Befund erstellt. Bitte oben auf <b>Befund erstellen</b> klicken.</div>"
+                    )
 
         # Inputs list in same order as UI_FIELDS (components)
         input_components = [
@@ -2957,18 +3100,18 @@ Strukturierte Eingabe → **Befund**, **Patienten‑Info (einfache Sprache)** un
                 raw["congestive_organopathy"] = None
 
             data = build_data_from_ui(raw)
-            main, patient_txt, internal, risk_html = generator.generate_all(data)
-            return main, patient_txt, internal, risk_html
+            main, patient_txt, internal, risk_html, sticky_html = generator.generate_all(data)
+            return main, patient_txt, internal, risk_html, sticky_html
 
         generate_btn.click(
             fn=_generate,
             inputs=input_components,
-            outputs=[main_out, patient_out, internal_out, risk_out],
+            outputs=[main_out, patient_out, internal_out, risk_out, sticky_out],
         )
         generate_btn_top.click(
             fn=_generate,
             inputs=input_components,
-            outputs=[main_out, patient_out, internal_out, risk_out],
+            outputs=[main_out, patient_out, internal_out, risk_out, sticky_out],
         )
 
 
@@ -3025,9 +3168,9 @@ Strukturierte Eingabe → **Befund**, **Patienten‑Info (einfache Sprache)** un
             empty["ino_ppm"] = 20
             empty["followup_timing_desc"] = "3–6 Monaten"
             empty["modules"] = []
-            return ui_set_values(empty)
+            return ui_set_values(empty) + ["", "", "", "<div class='muted'>Noch kein Befund erstellt. Bitte oben auf <b>Befund erstellen</b> klicken.</div>", initial_sticky]
 
-        clear_btn.click(fn=_clear, inputs=None, outputs=input_components)
+        clear_btn.click(fn=_clear, inputs=None, outputs=input_components + [main_out, patient_out, internal_out, risk_out, sticky_out])
 
         # -------------------------
         # Save / Load (JSON)
@@ -3047,7 +3190,9 @@ Strukturierte Eingabe → **Befund**, **Patienten‑Info (einfache Sprache)** un
             raw["modules"] = _labels_to_ids(labels)
 
             payload = {
-                "schema": "rhk_case_v1",
+                "schema": "rhk_case_v2",
+                "app": "rhk_befundassistent",
+                "app_version": APP_VERSION,
                 "saved_at": datetime.now().isoformat(timespec="seconds"),
                 "ui": raw,
             }
@@ -3341,7 +3486,7 @@ def build_interface_app():
             raw["congestive_organopathy"] = None
 
         data = build_data_from_ui(raw)
-        main, patient_txt, internal, risk_html = generator.generate_all(data)
+        main, patient_txt, internal, risk_html, sticky_html = generator.generate_all(data)
         return risk_html, main, patient_txt, internal
 
     # Examples (ein Beispiel)
