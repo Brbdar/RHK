@@ -1421,11 +1421,7 @@ class RHKReportGenerator:
         # Belastung
         # -------------------------
         exercise_done = bool(ex.get("exercise_done"))
-
-        # Slopes können direkt eingegeben werden; wenn nicht, werden sie aus Ruhe/Peak abgeleitet (falls möglich).
-        mpap_co_slope = to_num(ex.get("mpap_co_slope"))
-        pawp_co_slope = to_num(ex.get("pawp_co_slope"))
-        exercise_pattern: Optional[str] = None
+        exercise_pattern = classify_exercise_pattern(mpap_co_slope, pawp_co_slope) if exercise_done else None
 
         ex_spap = to_num(ex.get("pa_sys"))
         ex_dpap = to_num(ex.get("pa_dia"))
@@ -1446,23 +1442,8 @@ class RHKReportGenerator:
         if ex_pvr is None:
             ex_pvr = calc_pvr_wu(ex_mpap, ex_pawp, ex_co)
 
-        # Falls Slopes fehlen: aus Ruhe/Peak berechnen (nur wenn Belastung tatsächlich durchgeführt wurde)
-        if exercise_done:
-            try:
-                dco = None
-                if co is not None and ex_co is not None:
-                    dco = ex_co - co
-
-                if mpap_co_slope is None and mpap is not None and ex_mpap is not None and dco not in (None, 0):
-                    mpap_co_slope = (ex_mpap - mpap) / float(dco)
-
-                if pawp_co_slope is None and pawp is not None and ex_pawp is not None and dco not in (None, 0):
-                    pawp_co_slope = (ex_pawp - pawp) / float(dco)
-            except Exception:
-                # bei inkonsistenten Werten lieber kein Slope als Crash
-                pass
-
-            exercise_pattern = classify_exercise_pattern(mpap_co_slope, pawp_co_slope)
+        mpap_co_slope = to_num(ex.get("mpap_co_slope"))
+        pawp_co_slope = to_num(ex.get("pawp_co_slope"))
 
         # Belastungs‑PH Heuristik (nur wenn angegeben oder ableitbar)
         exercise_ph = bool(ex.get("exercise_ph"))
@@ -2088,7 +2069,23 @@ class RHKReportGenerator:
                 "zwischen Herzbereichen oder großen Gefäßen. Das klären wir mit weiteren Untersuchungen."
             )
 
-        if hfpef_res and hfpef_res.get("category") in ("possible", "likely"):
+        hf_cat = None
+        hf_score = None
+        if hfpef_res:
+            if isinstance(hfpef_res, dict):
+                hf_cat = hfpef_res.get("category")
+                hf_score = hfpef_res.get("score")
+            else:
+                hf_cat = getattr(hfpef_res, "category", None)
+                hf_score = getattr(hfpef_res, "score", None)
+
+        hfpef_flag = False
+        if hf_cat in ("mittlere Wahrscheinlichkeit", "hohe Wahrscheinlichkeit", "possible", "likely"):
+            hfpef_flag = True
+        elif isinstance(hf_score, int) and hf_score >= 2:
+            hfpef_flag = True
+
+        if hfpef_flag:
             patient_lines.append(
                 "Es gibt außerdem Hinweise, dass das linke Herz sich möglicherweise nicht gut entspannen kann. "
                 "Das kann Luftnot besonders bei Belastung verstärken."
