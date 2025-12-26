@@ -1,0 +1,423 @@
+meta:
+  name: "RHK-Befundassistent Regelwerk"
+  version: "18.0.0"
+  guideline_reference: "ESC/ERS Pulmonary Hypertension Guideline (2022) – core definitions + pragmatic clinical pathways"
+  notes: |
+    Dieses Regelwerk ist deklarativ und kann erweitert werden.
+    Regeln werden nach priority (hoch->niedrig) ausgewertet. Bei stop_processing endet die Auswertung.
+
+thresholds:
+  mpap_ph_mmHg: 20
+  pawp_postcap_mmHg: 15
+  pvr_precap_wu: 2.0
+  mpap_co_slope_mmHg_per_L_min: 3.0
+  pawp_co_slope_mmHg_per_L_min: 2.0
+  pvr_mild_ge: 2.0
+  pvr_moderate_ge: 5.0
+  pvr_severe_ge: 10.0
+  ci_low_lt: 2.0
+
+rules:
+  # ------------------------------------------------------------
+  # 1) "Hard" decision paths with highest priority
+  # ------------------------------------------------------------
+  - id: R_SHUNT_STEPUP
+    priority: 1000
+    when: "step_up_present == True"
+    actions:
+      set_bundle: "K16"
+      set_primary_dx: "Shunt-Verdacht (Links-Rechts-Shunt) aufgrund Sättigungssprung"
+      add_modules: ["P09"]
+      add_recommendations:
+        - "Weiterführende Shunt-Diagnostik (Echo/TEE/Bubble, ggf. Kardio-MRT/CT je nach Fragestellung) und Quantifizierung erwägen."
+      stop_processing: true
+
+  - id: R_VASO_POS
+    priority: 950
+    when: "vasoreactivity_done == True and ino_responder == True"
+    actions:
+      set_bundle: "K17"
+      set_primary_dx: "Präkapilläre PH, Vasoreagibilitätstest positiv"
+      add_modules: ["P11"]
+      add_recommendations:
+        - "Therapiepfad bei positiver Vasoreagibilität gemäß Leitlinie/zentraler SOP erwägen; engmaschige Verlaufskontrollen."
+      stop_processing: true
+
+  - id: R_VASO_NEG
+    priority: 940
+    when: "vasoreactivity_done == True and ino_responder == False"
+    actions:
+      set_bundle: "K18"
+      set_primary_dx: "Präkapilläre PH, Vasoreagibilitätstest negativ"
+      add_modules: ["P11"]
+      add_recommendations:
+        - "Kein Vasoreagibilitäts-spezifischer Therapiepfad; weiteres Vorgehen nach Ätiologie und Risikoprofil."
+      stop_processing: true
+
+  # ------------------------------------------------------------
+  # 2) Exercise logic (when exercise data present)
+  # ------------------------------------------------------------
+  - id: R_EX_NO_PH_NORMAL
+    priority: 850
+    when: "exercise_done == True and has_ph_rest == False and exercise_pattern == 'normal'"
+    actions:
+      set_bundle: "K01"
+      set_primary_dx: "Keine PH in Ruhe, Belastungsreaktion unauffällig"
+      add_recommendations:
+        - "Bei persistierender Belastungsdyspnoe weitere Abklärung nach klinischem Kontext (kardiologisch/pneumologisch, ggf. Spiroergometrie)."
+      stop_processing: true
+
+  - id: R_EX_LINKSHEART
+    priority: 840
+    when: "exercise_done == True and has_ph_rest == False and exercise_pattern == 'linkskardial'"
+    actions:
+      set_bundle: "K02"
+      set_primary_dx: "Keine PH in Ruhe, aber pathologische Belastungsreaktion mit linkskardialer Komponente"
+      add_modules: ["P09"]
+      add_recommendations:
+        - "Kardiologische Abklärung/Optimierung (HFpEF/Diastolik, Klappenvitien, Rhythmus) empfohlen."
+        - "PH-spezifische Therapie ist in dieser Konstellation in der Regel nicht primär indiziert."
+      stop_processing: true
+
+  - id: R_EX_PULMVASC
+    priority: 830
+    when: "exercise_done == True and (has_ph_rest == False or borderline_ph == True) and exercise_pattern == 'pulmvasc'"
+    actions:
+      set_bundle: "K03"
+      set_primary_dx: "Auffällige pulmonalvaskuläre Belastungsreaktion (Belastungs-PH/early pulmonary vascular disease)"
+      add_modules: ["P01","P11"]
+      add_recommendations:
+        - "Komplettierung der PH-Diagnostik (V/Q, CT/HRCT, Lufu/DLCO, Echo, Labor je nach Kontext) empfohlen."
+      stop_processing: true
+
+  # ------------------------------------------------------------
+  # 3) Rest PH classification (ESC/ERS definitions)
+  # ------------------------------------------------------------
+  - id: R_NO_PH_REST
+    priority: 700
+    when: "has_ph_rest == False"
+    actions:
+      set_bundle: "K01"
+      set_primary_dx: "Kein Hinweis auf PH in Ruhe"
+      stop_processing: true
+
+  - id: R_IPCPH
+    priority: 680
+    when: "has_ph_rest == True and has_postcap == True and has_precap_component == False"
+    actions:
+      set_bundle: "K14"
+      set_primary_dx: "Postkapilläre PH (Gruppe 2, linksatriale/linksventrikuläre Genese führend)"
+      add_modules: ["P09"]
+      add_recommendations:
+        - "Im Vordergrund: kardiologische Therapieoptimierung (Volumenmanagement, Blutdruck, Rhythmus, Klappentherapie nach Kontext)."
+      stop_processing: true
+
+  - id: R_CPCPH
+    priority: 670
+    when: "has_ph_rest == True and has_postcap == True and has_precap_component == True"
+    actions:
+      set_bundle: "K15"
+      set_primary_dx: "Kombinierte prä- und postkapilläre PH (CpcPH)"
+      add_modules: ["P01","P09"]
+      add_recommendations:
+        - "HF-/Linksherz-Optimierung (Dekongestion, Risikofaktoren, Rhythmus) UND DD-Abklärung der präkapillären Komponente im spezialisierten Setting."
+      stop_processing: true
+
+  - id: R_PRECAP_MILD
+    priority: 660
+    when: "has_ph_rest == True and has_postcap == False and has_precap_component == True and pvr_severity == 'mild'"
+    actions:
+      set_bundle: "K05"
+      set_primary_dx: "Präkapilläre PH (leichtgradig)"
+      add_modules: ["P01","P11"]
+      add_recommendations:
+        - "Differenzialdiagnostik (Gruppe 1 vs 3 vs 4 u.a.) gemäß Basisdiagnostik komplettieren."
+      stop_processing: true
+
+  - id: R_PRECAP_MOD
+    priority: 650
+    when: "has_ph_rest == True and has_postcap == False and has_precap_component == True and pvr_severity == 'moderate'"
+    actions:
+      set_bundle: "K06"
+      set_primary_dx: "Präkapilläre PH (mittelgradig)"
+      add_modules: ["P01","P11"]
+      add_recommendations:
+        - "Therapieeinleitung/Anbindung an PH-Zentrum je nach Kontext/Risiko erwägen; Verlaufskontrolle planen."
+      stop_processing: true
+
+  - id: R_PRECAP_SEV
+    priority: 640
+    when: "has_ph_rest == True and has_postcap == False and has_precap_component == True and (pvr_severity == 'severe' or ci_low == True)"
+    actions:
+      set_bundle: "K07"
+      set_primary_dx: "Präkapilläre PH (hochgradig) mit Hinweis auf limitierte Förderleistung"
+      add_modules: ["P02","P11"]
+      add_recommendations:
+        - "Engmaschige Kontrolle; bei Stauung Priorisierung Dekongestion. Therapieeskalation im spezialisierten Setting/Board diskutieren."
+      stop_processing: true
+
+  - id: R_BORDERLINE
+    priority: 600
+    when: "borderline_ph == True or (has_ph_rest == True and has_precap_component == False and has_postcap == False)"
+    actions:
+      set_bundle: "K04"
+      set_primary_dx: "Grenzwertige / unklassifizierte Hämodynamik"
+      add_modules: ["P11"]
+      add_recommendations:
+        - "Interpretation im klinischen Kontext; ggf. Provokation/Verlauf und Komplettierung Zusatzdiagnostik."
+      stop_processing: true
+
+  # ------------------------------------------------------------
+  # 4) Etiology prioritisation (Guideline-inspired differential groups)
+  # These rules do NOT override bundle if already set, but add tags/recommendations/modules.
+  # ------------------------------------------------------------
+  - id: R_CTEPH_PATH
+    priority: 500
+    when: "cteph_markers == True and (has_precap_component == True or exercise_pattern == 'pulmvasc')"
+    actions:
+      add_tags: ["DD: Gruppe 4 (CTEPD/CTEPH)"]
+      add_modules: ["P10"]
+      add_recommendations:
+        - "CTEPD/CTEPH-Diagnostikpfad: V/Q-Szintigraphie (falls ausstehend), CT-PA/Angiographie je nach Vorbefund; Vorstellung im CTEPH-Board (PEA/BPA) erwägen."
+
+  - id: R_GROUP3_ILD
+    priority: 490
+    when: "ild_present == True and (has_precap_component == True or exercise_pattern == 'pulmvasc')"
+    actions:
+      add_tags: ["DD: Gruppe 3 (Lungenerkrankung/ILD)"]
+      add_modules: ["P08","P12"]
+      add_recommendations:
+        - "Hinweis auf Lungenerkrankung/ILD: pneumologische Mitbeurteilung, HRCT/ILD-Board/Fibroseambulanz je nach Kontext; Hypoxie/OSA/OHS mitbeurteilen."
+
+  - id: R_GROUP3_EMPHY
+    priority: 485
+    when: "emphysema_present == True and (has_precap_component == True or exercise_pattern == 'pulmvasc')"
+    actions:
+      add_tags: ["DD: Gruppe 3 (COPD/Emphysem)"]
+      add_modules: ["P12"]
+      add_recommendations:
+        - "Bei Emphysem/COPD-Konstellation: Optimierung pneumologischer Therapie, Abklärung Hypoxämie/LTOT-Indikation, Reha."
+
+  - id: R_GROUP2_HFPEF_LA
+    priority: 480
+    when: "la_enlarged == True and lvef_preserved == True"
+    actions:
+      add_tags: ["Hinweis: HFpEF/diastolische Komponente"]
+      add_recommendations:
+        - "Bei LA-Vergrößerung und erhaltener LVEF: HFpEF/diastolische Dysfunktion mitbeurteilen (Echo, Klinik, Scores)."
+
+  - id: R_GROUP2_HFPEF_PH
+    priority: 470
+    when: "la_enlarged == True and lvef_preserved == True and has_ph_rest == True"
+    actions:
+      add_tags: ["Konstellation: HFpEF + PH möglich"]
+      add_recommendations:
+        - "Konstellation vereinbar mit HFpEF+PH; Fokus auf Volumenstatus, Blutdruck, Rhythmus und Komorbiditäten."
+
+  - id: R_GROUP2_HFPEF_CPC
+    priority: 465
+    when: "la_enlarged == True and lvef_preserved == True and has_ph_rest == True and has_postcap == True and has_precap_component == True"
+    actions:
+      add_tags: ["Konstellation: HFpEF + CpcPH möglich"]
+      add_recommendations:
+        - "Bei CpcPH im HFpEF-Setting: neben Linksherz-Management präkapilläre DD (Gruppe 1/3/4) im spezialisierten Setting aktiv prüfen."
+
+  - id: R_PORTOPULM
+    priority: 460
+    when: "portal_hypertension == True and high_flow == True"
+    actions:
+      add_tags: ["DD: Portopulmonale PH / Hyperzirkulation"]
+      add_recommendations:
+        - "Bei portaler Hypertension/Hyperzirkulation: interdisziplinäre Betreuung (PH-/Leberzentrum); Hochfluss-Ursachen/Anämie/Infekt/Thyreotoxikose prüfen."
+
+  # ------------------------------------------------------------
+  # 5) Congestion / IVC / RAP
+  # ------------------------------------------------------------
+  - id: R_CONGESTION_IVC
+    priority: 420
+    when: "congestion_likely == True"
+    actions:
+      add_tags: ["Stauung: zentralvenös wahrscheinlich"]
+      add_modules: ["P02"]
+      add_recommendations:
+        - "Bei Hinweis auf zentrale Stauung: Dekongestion/Diuretikamanagement und Kontrolle Nierenfunktion/Elekrolyte erwägen."
+
+  # ------------------------------------------------------------
+  # 6) Anemia logic (Hb low -> ask/act)
+  # ------------------------------------------------------------
+  - id: R_ANEMIA_REQUIRE_TYPE
+    priority: 400
+    when: "anemia_present == True and anemia_type is None"
+    actions:
+      require_fields: ["anemia_type"]
+      add_recommendations:
+        - "Hb erniedrigt: Anämie-Typisierung (mikro-/normo-/makrozytär) und Ursachenabklärung empfohlen."
+
+  - id: R_ANEMIA_MICRO
+    priority: 390
+    when: "anemia_present == True and anemia_type == 'micro'"
+    actions:
+      add_recommendations:
+        - "Mikrozytäre Anämie: Eisenstatus (Ferritin/TSAT) und Blutungsquellen (GI/Gyn) abklären; Substitution gemäß Standard."
+
+  - id: R_ANEMIA_MACRO
+    priority: 385
+    when: "anemia_present == True and anemia_type == 'macro'"
+    actions:
+      add_recommendations:
+        - "Makrozytäre Anämie: B12/Folat, Leber, Alkohol, Hämatologie-DD prüfen; Therapie gemäß Ursache."
+
+  - id: R_ANEMIA_NORMO
+    priority: 380
+    when: "anemia_present == True and anemia_type == 'normo'"
+    actions:
+      add_recommendations:
+        - "Normozytäre Anämie: Entzündung/Niere/Chronik/DD prüfen; ggf. Eisenstatus, Retikulozyten, Hämolyseparameter."
+
+  # ------------------------------------------------------------
+  # 7) Entresto / BNP logic
+  # ------------------------------------------------------------
+  - id: R_ENTRESTO_BNP_NOTE
+    priority: 360
+    when: "entresto == True and bnp_marker == 'BNP'"
+    actions:
+      add_recommendations:
+        - "Unter Sacubitril/Valsartan (ARNI) kann BNP erhöht/geringer interpretierbar sein; NT-proBNP ist in der Regel besser verwertbar."
+
+  # ------------------------------------------------------------
+  # 8) ILD detail requirements
+  # ------------------------------------------------------------
+  - id: R_ILD_DETAILS
+    priority: 340
+    when: "ild_present == True"
+    actions:
+      require_fields: ["ild_type","ild_extent","ild_histology","ild_fibrosis_clinic"]
+      add_recommendations:
+        - "ILD: Typ/Ausmaß/histologische Sicherung/Anbindung an Fibroseambulanz dokumentieren (Konsequenzen für Gruppe-3-DD und Therapiepfad)."
+
+  # ------------------------------------------------------------
+  # 9) Infection/Immunology detail requirements
+  # ------------------------------------------------------------
+  - id: R_VIROLOGY_DETAILS
+    priority: 330
+    when: "virology_positive == True"
+    actions:
+      require_fields: ["virology_details"]
+
+  - id: R_IMMUNOLOGY_DETAILS
+    priority: 325
+    when: "immunology_positive == True"
+    actions:
+      require_fields: ["immunology_details"]
+
+  # ------------------------------------------------------------
+  # 10) Abdomen sono details
+  # ------------------------------------------------------------
+  - id: R_ABDOMEN_DETAILS
+    priority: 315
+    when: "abdomen_sono_done == True"
+    actions:
+      require_fields: ["abdomen_findings"]
+
+  # ------------------------------------------------------------
+  # 11) LTOT details
+  # ------------------------------------------------------------
+  - id: R_LTOT_DETAILS
+    priority: 310
+    when: "ltot_present == True and ltot_flow_l_min is None"
+    actions:
+      require_fields: ["ltot_flow_l_min"]
+
+  # ------------------------------------------------------------
+  # 12) HFpEF score based recommendation (non-prescriptive)
+  # ------------------------------------------------------------
+  - id: R_HFPEF_SCORE_LIKELY
+    priority: 280
+    when: "hfpef_prob is not None and hfpef_prob >= 0.8"
+    actions:
+      add_tags: ["HFpEF-Scores: hohe Wahrscheinlichkeit"]
+      add_recommendations:
+        - "HFpEF-Score: hohe Wahrscheinlichkeit für diastolische Funktionsstörung – kardiologische Therapieoptimierung und Komorbiditätsmanagement priorisieren."
+        - "SGLT2-Inhibitoren können bei HFpEF (je nach Kontraindikationen) erwogen werden; Umsetzung gemäß Leitlinie/Fachinformation und klinischem Setting."
+
+  - id: R_HFPEF_SCORE_POSSIBLE
+    priority: 270
+    when: "hfpef_prob is not None and hfpef_prob >= 0.5 and hfpef_prob < 0.8"
+    actions:
+      add_tags: ["HFpEF-Scores: mögliche Wahrscheinlichkeit"]
+      add_recommendations:
+        - "HFpEF-Score: relevante Wahrscheinlichkeit – diastolische Komponente in Diagnostik/Management berücksichtigen."
+
+  # ------------------------------------------------------------
+  # 13) Missing core hemodynamics for classification
+  # ------------------------------------------------------------
+  - id: R_REQUIRE_MPAP
+    priority: 200
+    when: "mpap is None and (spap is not None and dpap is not None)"
+    actions:
+      # mpap can be calculated, so no require; note only
+      add_tags: ["mPAP wurde aus sPAP/dPAP berechnet"]
+
+  - id: R_REQUIRE_PAWP
+    priority: 190
+    when: "has_ph_rest == True and pawp is None"
+    actions:
+      require_fields: ["pawp"]
+
+  - id: R_REQUIRE_CO_FOR_PVR
+    priority: 185
+    when: "has_ph_rest == True and pvr is None"
+    actions:
+      require_fields: ["co"]
+
+  - id: R_REQUIRE_BSA_FOR_CI
+    priority: 180
+    when: "ci is None and co is not None and bsa is None"
+    actions:
+      require_fields: ["height_cm","weight_kg"]
+# ------------------------------------------------------------
+  # 14) Exercise adaptation type (homeometric vs heterometric) – heuristic
+  # ------------------------------------------------------------
+  - id: R_EX_ADAPT_HOMEOMETRIC
+    priority: 260
+    when: "exercise_done == True and delta_spap is not None and delta_spap >= 30 and ci_peak is not None and ci is not None and ci_peak >= ci"
+    actions:
+      add_tags: ["RV-Reaktion unter Belastung: eher homeometrische Adaptation (heuristisch)"]
+      add_recommendations:
+        - "Belastungsreaktion mit deutlichem ΔsPAP bei erhaltener/verbesserter Förderleistung kann auf eher homeometrischen Adaptationstyp hinweisen (heuristische Einordnung)."
+
+  - id: R_EX_ADAPT_HETEROMETRIC
+    priority: 255
+    when: "exercise_done == True and delta_spap is not None and delta_spap >= 30 and ci_peak is not None and ci is not None and ci_peak < ci"
+    actions:
+      add_tags: ["RV-Reaktion unter Belastung: eher heterometrische Adaptation (heuristisch)"]
+      add_recommendations:
+        - "Belastungsreaktion mit deutlichem ΔsPAP bei abnehmender Förderleistung kann auf eher heterometrischen Adaptationstyp hinweisen (heuristische Einordnung)."
+
+  # ------------------------------------------------------------
+  # 15) Combined DD emphasis
+  # ------------------------------------------------------------
+  - id: R_DD_GROUP3_AND_4
+    priority: 240
+    when: "ild_present == True and cteph_markers == True"
+    actions:
+      add_tags: ["DD: kombinierte Hinweise Gruppe 3 UND Gruppe 4"]
+      add_recommendations:
+        - "Sowohl ILD- als auch CTEPH-Hinweise: interdisziplinäre Einordnung (PH/ILD/CTEPH-Konferenz) empfohlen."
+
+  # ------------------------------------------------------------
+  # 16) If key workup missing, suggest
+  # ------------------------------------------------------------
+  - id: R_SUGGEST_VQ_IF_PRECAP
+    priority: 230
+    when: "has_precap_component == True and vq_done != True"
+    actions:
+      add_recommendations:
+        - "Bei präkapillärer Komponente: V/Q-Szintigraphie zum Ausschluss CTEPD/CTEPH wird empfohlen (falls noch nicht erfolgt)."
+
+  - id: R_SUGGEST_LUFU_IF_GROUP3_HINT
+    priority: 225
+    when: "(ild_present == True or emphysema_present == True or ltot_present == True) and lufu_done != True"
+    actions:
+      add_recommendations:
+        - "Bei Hinweis auf Lungenerkrankung/Hypoxie: Lungenfunktion inkl. DLCO (und BGA) komplettieren (falls noch nicht erfolgt)."
