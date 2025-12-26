@@ -1,0 +1,304 @@
+meta:
+  version: 19
+  updated: 2025-12-26
+  notes:
+    - "v19: strukturierte Befundübersicht (Klinik/Labor/Bildgebung) vor Risikostratifizierung"
+    - "v19: VCI-Kollaps kategorisch (ja/nein), Stufenoxymetrie mit automatischer Sättigungssprung-Erkennung"
+    - "v19: Kurvenmorphologie (V-/A-Welle, Dip-Plateau etc.)"
+    - "v19: Procedere-Module werden gegen bereits durchgeführte Diagnostik gefiltert"
+
+rules:
+  # ------------------------------------------------------------
+  # Minimal required fields
+  # ------------------------------------------------------------
+  - id: R_REQUIRE_CORE_HEMO
+    priority: 10
+    when: "mpap == None"
+    then:
+      require_fields: ["spap_rest", "dpap_rest", "pawp_rest", "co_rest"]
+
+  # ------------------------------------------------------------
+  # Base hemodynamic classification (rest)
+  # ------------------------------------------------------------
+  - id: R_NO_PH_REST
+    priority: 20
+    when: "mpap != None and mpap <= 20"
+    then:
+      set_bundle: "K00"
+      set_primary_dx: "Kein Hinweis auf pulmonale Hypertonie (in Ruhe)"
+
+  - id: R_PH_UNCLASSIFIED
+    priority: 25
+    when: "mpap != None and mpap > 20 and (pawp_rest == None or pvr == None)"
+    then:
+      set_bundle: "K01"
+      set_primary_dx: "Pulmonale Hypertonie – unvollständig klassifizierbar (Angaben fehlen)"
+      add_tags: ["Bitte Klassifikation komplettieren"]
+
+  - id: R_IPCPH
+    priority: 30
+    when: "mpap != None and mpap > 20 and pawp_rest != None and pawp_rest > 15 and pvr != None and pvr <= 2"
+    then:
+      set_bundle: "K14"
+      set_primary_dx: "Isoliert postkapilläre PH (iPcPH, Gruppe 2 wahrscheinlich)"
+      add_tags: ["postkapillär", "Gruppe 2 (wahrscheinlich)"]
+
+  - id: R_CPCPH
+    priority: 31
+    when: "mpap != None and mpap > 20 and pawp_rest != None and pawp_rest > 15 and pvr != None and pvr > 2"
+    then:
+      set_bundle: "K15"
+      set_primary_dx: "Kombinierte prä-/postkapilläre PH (CpcPH)"
+      add_tags: ["CpcPH", "Gruppe 2 mit präkapillärer Komponente"]
+
+  - id: R_PRECAP_MILD
+    priority: 40
+    when: "mpap != None and mpap > 20 and pawp_rest != None and pawp_rest <= 15 and pvr != None and pvr > 2 and pvr <= 5"
+    then:
+      set_bundle: "K05"
+      set_primary_dx: "Präkapilläre PH (mild)"
+      add_tags: ["präkapillär"]
+
+  - id: R_PRECAP_MOD
+    priority: 41
+    when: "mpap != None and mpap > 20 and pawp_rest != None and pawp_rest <= 15 and pvr != None and pvr > 5 and pvr <= 8"
+    then:
+      set_bundle: "K06"
+      set_primary_dx: "Präkapilläre PH (moderat)"
+      add_tags: ["präkapillär"]
+
+  - id: R_PRECAP_SEV
+    priority: 42
+    when: "mpap != None and mpap > 20 and pawp_rest != None and pawp_rest <= 15 and pvr != None and pvr > 8"
+    then:
+      set_bundle: "K07"
+      set_primary_dx: "Präkapilläre PH (schwer)"
+      add_tags: ["präkapillär", "schwer"]
+
+  # ------------------------------------------------------------
+  # Exercise hemodynamics – override K00 if abnormal
+  # ------------------------------------------------------------
+  - id: R_EXERCISE_PRECAP_PATTERN
+    priority: 60
+    when: "mpap != None and mpap <= 20 and exercise_done == True and mpap_co_slope != None and pawp_co_slope != None and mpap_co_slope > 3 and pawp_co_slope <= 2"
+    then:
+      set_bundle: "K09"
+      set_primary_dx: "Belastungs-PH (präkapilläre Druckantwort)"
+      add_tags: ["Belastungs-PH", "präkapilläres Belastungsmuster"]
+
+  - id: R_EXERCISE_POSTCAP_PATTERN
+    priority: 61
+    when: "mpap != None and mpap <= 20 and exercise_done == True and mpap_co_slope != None and pawp_co_slope != None and mpap_co_slope > 3 and pawp_co_slope > 2"
+    then:
+      set_bundle: "K10"
+      set_primary_dx: "Belastungs-PH (postkapilläre Druckantwort)"
+      add_tags: ["Belastungs-PH", "postkapilläres Belastungsmuster"]
+
+  # ------------------------------------------------------------
+  # Procedere baseline module – add if core diagnostics incomplete
+  # ------------------------------------------------------------
+  - id: R_SUGGEST_P01_IF_INCOMPLETE
+    priority: 80
+    when: "has_ph == True and (echo_done != True or lufu_done != True or ct_done != True or vq_done != True)"
+    then:
+      add_modules: ["P01"]
+
+  # ------------------------------------------------------------
+  # Congestion
+  # ------------------------------------------------------------
+  - id: R_CONGESTION_TAG
+    priority: 120
+    when: "congestion_likely == True"
+    then:
+      add_tags: ["venöse Kongestion"]
+      add_recommendations:
+        - "Zeichen der venösen Kongestion (u.a. kein VCI-Kollaps bzw. erhöhte RAP) – Volumenstatus/Diurese prüfen und ggf. Entlastungstherapie anpassen."
+      add_modules: ["P02"]
+
+  # ------------------------------------------------------------
+  # Diastolic dysfunction / HFpEF hints
+  # ------------------------------------------------------------
+  - id: R_DIASTOLIC_HINT
+    priority: 140
+    when: "la_enlarged == True and ee_ratio != None and ee_ratio >= 14"
+    then:
+      add_tags: ["Hinweis diastolische Funktionsstörung"]
+      add_recommendations:
+        - "Echo-Konstellation (LA erweitert, E/e' erhöht) passt zu diastolischer Funktionsstörung – kardiologische Therapieoptimierung erwägen."
+
+  - id: R_HFPEF_LIKELY
+    priority: 141
+    when: "hfpef_category == 'likely'"
+    then:
+      add_tags: ["HFpEF wahrscheinlich"]
+      add_recommendations:
+        - "HFpEF-Wahrscheinlichkeit hoch (H2FPEF) – HFpEF-Management nach Leitlinie (u.a. SGLT2-Inhibitoren, Volumenmanagement, Rhythmus-/RR-Kontrolle)."
+      add_modules: ["P09"]
+
+  # ------------------------------------------------------------
+  # Belastung: Adaptionstyp (delta sPAP / peak CI)
+  # ------------------------------------------------------------
+  - id: R_ADAPT_HOMEOMETRIC
+    priority: 150
+    when: "adaptation_type == 'homeometric'"
+    then:
+      add_tags: ["homeometrischer Adaptionstyp"]
+      add_recommendations:
+        - "Belastung: homeometrischer Adaptionstyp (Druckanstieg bei erhaltener/steigender kardialer Leistung)."
+
+  - id: R_ADAPT_HETEROMETRIC
+    priority: 151
+    when: "adaptation_type == 'heterometric'"
+    then:
+      add_tags: ["heterometrischer Adaptionstyp"]
+      add_recommendations:
+        - "Belastung: heterometrischer Adaptionstyp (Druckanstieg bei unzureichender Zunahme der kardialen Leistung)."
+
+
+  # ------------------------------------------------------------
+  # S'/RAAI coupling
+  # ------------------------------------------------------------
+  - id: R_SPRIME_RAAI_LOW
+    priority: 160
+    when: "s_prime_raai != None and s_prime_raai < 0.81"
+    then:
+      add_tags: ["S'/RAAI erniedrigt"]
+      add_recommendations:
+        - "S'/RAAI erniedrigt (<0,81 m²/(s·cm); Yogeswaran et al.) – Warnsignal für RV/RA-Belastung bzw. RV diastolische Dysfunktion (im Kontext bewerten)."
+
+
+  # ------------------------------------------------------------
+  # TAPSE/sPAP coupling (Tello)
+  # ------------------------------------------------------------
+  - id: R_TAPSE_SPAP_LOW
+    priority: 161
+    when: "tapse_spap != None and tapse_spap < 0.31"
+    then:
+      add_tags: ["TAPSE/sPAP erniedrigt"]
+      add_recommendations:
+        - "TAPSE/sPAP erniedrigt (<0,31 mm/mmHg; Tello et al.) – Hinweis auf eingeschränkte RV–PA-Kopplung (prognostischer Marker); Verlauf/Leitlinien-Risikoprofil im Kontext beurteilen."
+
+  # Anemia
+  # ------------------------------------------------------------
+
+
+  - id: R_ANEMIA_REQUIRE_TYPE
+    priority: 170
+    when: "anemia == True"
+    then:
+      add_tags: ["Anämie"]
+      require_fields: ["anemia_type"]
+      add_recommendations:
+        - "Anämie: bitte Typisierung und Ursachenabklärung (z.B. Eisenstatus, B12/Folat, Entzündung, Blutverlust) und Behandlung, da relevante Auswirkung auf Belastbarkeit möglich."
+
+  - id: R_ANEMIA_MICRO
+    priority: 171
+    when: "anemia == True and anemia_type == 'microcytic'"
+    then:
+      add_recommendations:
+        - "Mikrozytäre Anämie: Eisenmangel wahrscheinlich – Ferritin/Transferrinsättigung bestimmen, Blutungsquelle ausschließen, Substitution erwägen."
+
+  - id: R_ANEMIA_MACRO
+    priority: 172
+    when: "anemia == True and anemia_type == 'macrocytic'"
+    then:
+      add_recommendations:
+        - "Makrozytäre Anämie: B12-/Folatmangel, Leber/Alkohol, hämatologische Ursachen erwägen – entsprechende Diagnostik."
+
+  - id: R_ANEMIA_NORMO
+    priority: 173
+    when: "anemia == True and anemia_type == 'normocytic'"
+    then:
+      add_recommendations:
+        - "Normozytäre Anämie: chronische Entzündung/Nierenfunktion, hämatologische Ursachen oder Blutverlust erwägen."
+
+  # ------------------------------------------------------------
+  # Entresto (ARNI) – BNP interpretation
+  # ------------------------------------------------------------
+  - id: R_ENTRESTO_BNP_NOTE
+    priority: 180
+    when: "entresto == True and bnp_kind == 'BNP'"
+    then:
+      add_recommendations:
+        - "Unter ARNI (Sacubitril/Valsartan) kann BNP erhöht sein – NT-proBNP ist zur Verlaufskontrolle typischerweise besser geeignet."
+
+  # ------------------------------------------------------------
+  # Imaging-driven etiologic hints
+  # ------------------------------------------------------------
+  - id: R_GROUP3_HINT
+    priority: 200
+    when: "(ct_ild == True or ct_emphysema == True or lufu_restrictive == True or lufu_obstructive == True or lufu_diffusion == True) and has_ph == True"
+    then:
+      add_tags: ["DD Gruppe 3 (Lunge/Hypoxie)"]
+      add_recommendations:
+        - "Hinweise auf relevante Lungenerkrankung/Hypoxie als Mitursache – pneumologische Mitbeurteilung und Optimierung der Oxygenierung."
+      add_modules: ["P08", "P12"]
+
+  - id: R_CTEPH_HINT
+    priority: 210
+    when: "(vq_defect == True or ct_embolie == True or ct_mosaic == True) and has_ph == True and pawp_rest != None and pawp_rest <= 15 and pvr != None and pvr > 2"
+    then:
+      set_bundle: "K11"
+      set_primary_dx: "CTEPD/CTEPH wahrscheinlich (Gruppe 4)"
+      add_tags: ["DD Gruppe 4 (CTEPH/CTEPD)"]
+      add_recommendations:
+        - "CTEPH/CTEPD-Verdacht: Bitte Vorstellung im CTEPH-/PH-Board (OP/BPA/medikamentös) und strukturierte Abklärung (V/Q, CT-/Angio-Review, ggf. Pulmonalisangiographie)."
+      add_modules: ["P10"]
+
+  # ------------------------------------------------------------
+  # Shunt step-up – final override
+  # ------------------------------------------------------------
+  - id: R_SHUNT_STEPUP
+    priority: 300
+    when: "step_up_present == True"
+    then:
+      set_bundle: "K16"
+      set_primary_dx: "Links-Rechts-Shunt (Verdacht, Stufenoxymetrie)"
+      add_tags: ["Shuntverdacht"]
+      add_recommendations:
+        - "Relevanter Sättigungssprung in der Stufenoxymetrie – gezielte Shunt-Abklärung (Echo/TEE ± Kontrast, kardiale Bildgebung; ggf. Qp/Qs)."
+
+  # ------------------------------------------------------------
+  # Curve morphology hints
+  # ------------------------------------------------------------
+  - id: R_WEDGE_V_WAVE
+    priority: 320
+    when: "v_wave == True"
+    then:
+      add_tags: ["Prominente V-Welle (PAWP)"]
+      add_recommendations:
+        - "Prominente V-Welle in der Wedge-Kurve: DD Mitralinsuffizienz/LA-Druckspitzen – Echokardiographie (ggf. TEE) und klinische Korrelation."
+
+  - id: R_WEDGE_A_WAVE
+    priority: 321
+    when: "a_wave == True"
+    then:
+      add_tags: ["Prominente A-Welle (PAWP)"]
+      add_recommendations:
+        - "Prominente A-Welle in der Wedge-Kurve: DD verminderte LV-Compliance/diastolische Dysfunktion – klinische/echo-kardiologische Korrelation."
+
+  - id: R_RAP_V_WAVE
+    priority: 322
+    when: "rap_v_wave_flag == True"
+    then:
+      add_tags: ["Prominente V-Welle (RAP)"]
+      add_recommendations:
+        - "Prominente V-Welle in der RAP-Kurve: DD relevante Trikuspidalinsuffizienz – Echo/klinische Korrelation."
+
+
+  - id: R_RV_DIP_PLATEAU
+    priority: 330
+    when: "rv_dip_plateau_flag == True"
+    then:
+      add_tags: ["Dip-Plateau (RV)"]
+      add_recommendations:
+        - "Dip-Plateau in der RV-Kurve: DD konstriktive Perikarditis/restriktive Pathologie – perikardiale Bildgebung/klinische Zeichen prüfen."
+
+  - id: R_RV_PSEUDO_DIP
+    priority: 331
+    when: "rv_pseudo_dip_flag == True"
+    then:
+      add_tags: ["Pseudo-Dip (RV)"]
+      add_recommendations:
+        - "Pseudo-Dip in der RV-Kurve: Mess-/Atemartefakte möglich – Kurven-/Nullniveau prüfen, ggf. Wiederholung."
+
