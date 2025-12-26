@@ -1,148 +1,190 @@
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-Patienten-Textbausteine (Einfache Sprache, ausführlicher).
+rhk_textdb_patient_v7.py
+Patientenfreundliche Textbausteine (Einfache Sprache, zusammenhängende Absätze).
+Ziel: Die Inhalte sollen ohne Abkürzungen und ohne Zahlenwerte verständlich sein.
 
 Hinweis:
-- Keine Zahlenwerte / Abkürzungen, damit Patient:innen den Text gut verstehen.
-- Die Texte sind als Ergänzung gedacht und ersetzen keine ärztliche Aufklärung.
+Diese Texte sind bewusst "soft" formuliert und sollen das ärztliche Gespräch nicht ersetzen.
 """
 
 from __future__ import annotations
-
 from dataclasses import dataclass
-from typing import Dict
+from typing import Dict, List
 
 
 @dataclass(frozen=True)
 class PatientBlock:
-    key: str
+    id: str
     title: str
-    text: str
+    template: str
 
 
-PATIENT_BLOCKS: Dict[str, Dict[str, str]] = {
-    "P01": {
-        "title": "Weitere Abklärung (Basisdiagnostik)",
-        "text": (
-            "Als nächstes ist wichtig, die Ursache Ihrer Beschwerden möglichst genau einzugrenzen. "
-            "Dazu werden – je nach Situation – zusätzliche Untersuchungen von Herz und Lunge geplant. "
-            "Das kann zum Beispiel eine detaillierte Bildgebung, eine genaue Lungenfunktionsprüfung, "
-            "spezielle Blutuntersuchungen oder eine Abklärung von Blutgerinnseln in der Lunge umfassen. "
-            "Das Ziel ist, die Behandlung später wirklich passend auszuwählen."
-        ),
-    },
-    "P02": {
-        "title": "Entwässerung (bei Wasseransammlungen)",
-        "text": (
-            "Wenn sich im Körper Wasser ansammelt, kann das das Herz zusätzlich belasten und die Luftnot verstärken. "
-            "Entwässernde Medikamente helfen, überschüssige Flüssigkeit auszuschwemmen. "
-            "Wichtig sind dabei regelmäßige Gewichtskontrollen, eine sinnvolle Trinkmengen‑Abstimmung "
-            "und Blutkontrollen, damit Salz- und Nierenwerte stabil bleiben. "
-            "Bitte melden Sie sich frühzeitig, wenn das Gewicht schnell ansteigt oder Beine/Bauch deutlich anschwellen."
-        ),
-    },
-    "P03": {
-        "title": "Medikament zur Entspannung der Lungengefäße",
-        "text": (
-            "Es gibt Medikamente, die die Blutgefäße in der Lunge entspannen und dadurch die Durchblutung verbessern können. "
-            "Ziel ist, dass das rechte Herz weniger gegen Widerstand arbeiten muss und Sie im Alltag besser belastbar sind. "
-            "Solche Medikamente werden meist langsam eingeschlichen und die Wirkung wird in Verlaufskontrollen überprüft. "
-            "Wenn Nebenwirkungen auftreten (zum Beispiel Kopfschmerzen, Schwindel oder Blutdruckabfall), "
-            "sollten Sie sich bitte melden."
-        ),
-    },
-    "P04": {
-        "title": "Medikament mit Wirkung auf Botenstoffe der Gefäße",
-        "text": (
-            "Es gibt Medikamente, die bestimmte Botenstoffe im Körper beeinflussen, die die Lungengefäße verengen können. "
-            "Dadurch kann sich der Druck im Lungenkreislauf langfristig verbessern. "
-            "Vor und während der Behandlung sind regelmäßige Kontrollen wichtig, "
-            "zum Beispiel Blutwerte und – je nach Präparat – weitere Sicherheitskontrollen. "
-            "Ihr Behandlungsteam erklärt Ihnen genau, worauf Sie achten sollen."
-        ),
-    },
-    "P05": {
-        "title": "Alternative/Wechsel‑Therapie zur Verbesserung des Lungenkreislaufs",
-        "text": (
-            "In manchen Situationen ist ein anderes Medikament sinnvoll, das die Durchblutung im Lungenkreislauf verbessert "
-            "und so das rechte Herz entlasten kann. "
-            "Ob ein Wechsel oder eine Ergänzung passt, hängt von der vermuteten Ursache, der Verträglichkeit "
-            "und dem bisherigen Verlauf ab. "
-            "Auch hier sind regelmäßige Kontrollen wichtig, damit Nutzen und Sicherheit gut eingeschätzt werden können."
-        ),
-    },
-    "P06": {
-        "title": "Intensivere Therapieoptionen (bei ausgeprägter Belastung)",
-        "text": (
-            "Wenn die Erkrankung stärker ausgeprägt ist oder sich trotz Behandlung nicht ausreichend bessert, "
-            "gibt es intensivere Therapieoptionen. "
-            "Ein Teil dieser Behandlungen wirkt sehr stark und wird manchmal als Dauertherapie über eine Pumpe gegeben. "
-            "Das klingt aufwendig, kann aber in passenden Fällen die Beschwerden deutlich verbessern. "
-            "Ob das für Sie infrage kommt, wird in Ruhe besprochen und gemeinsam entschieden."
-        ),
-    },
-    "P07": {
-        "title": "Studien / neue Behandlungsmöglichkeiten",
-        "text": (
-            "Manchmal kann die Teilnahme an einer Studie sinnvoll sein – zum Beispiel, wenn Standardbehandlungen nicht ausreichen "
-            "oder wenn neue Therapieansätze geprüft werden. "
-            "Eine Studienteilnahme ist immer freiwillig. "
-            "Sie bekommen ausführliche Informationen über Ziele, mögliche Vorteile und Risiken, "
-            "und Sie können jederzeit ohne Nachteile wieder aussteigen."
-        ),
-    },
-    "P08": {
-        "title": "Besprechung im Lungen‑Spezialteam",
-        "text": (
-            "Wenn Hinweise auf Veränderungen des Lungengewebes bestehen, ist oft eine Besprechung im spezialisierten Team sinnvoll. "
-            "Dabei werden Bildgebung, Lungenfunktion und Ihre Beschwerden gemeinsam bewertet. "
-            "So lässt sich besser entscheiden, ob eine gezielte Behandlung der Lunge nötig ist "
-            "und wie das mit der Behandlung des Lungenkreislaufs zusammenspielt."
-        ),
-    },
-    "P09": {
-        "title": "Mitbeurteilung durch Herz‑Spezialist:innen",
-        "text": (
-            "Da Herz und Lunge eng zusammenarbeiten, ist manchmal eine zusätzliche kardiologische Mitbeurteilung sinnvoll. "
-            "Dabei wird zum Beispiel geprüft, ob Herzklappen, Herzrhythmus oder eine Durchblutungsstörung des Herzens "
-            "zu den Beschwerden beitragen könnten. "
-            "Wenn man solche Faktoren erkennt und behandelt, kann sich die Belastbarkeit deutlich verbessern."
-        ),
-    },
-    "P10": {
-        "title": "Blutgerinnung / Blutverdünnung",
-        "text": (
-            "Wenn der Verdacht besteht, dass Blutgerinnsel in der Lunge eine Rolle spielen, kann eine Blutverdünnung nötig sein. "
-            "Welche Art der Blutverdünnung passend ist, hängt von Ihrer Situation und möglichen Blutungsrisiken ab. "
-            "Oft ist eine Mitbetreuung durch eine Gerinnungs‑Sprechstunde hilfreich, "
-            "damit die Behandlung sicher eingestellt und regelmäßig kontrolliert wird."
-        ),
-    },
-    "P11": {
-        "title": "Verlaufskontrolle",
-        "text": (
-            "Zur sicheren Beurteilung braucht es Verlaufskontrollen. "
-            "Dabei wird geschaut, wie es Ihnen klinisch geht, wie belastbar Sie sind und ob sich Blutwerte oder Herz‑/Lungenwerte verändern. "
-            "Je nach Verlauf kann die Therapie beibehalten, angepasst oder erweitert werden. "
-            "Bitte kommen Sie zu den vereinbarten Terminen, auch wenn es Ihnen zwischenzeitlich besser geht."
-        ),
-    },
-    "P12": {
-        "title": "Genauere Lungenfunktions‑Abklärung",
-        "text": (
-            "Eine genaue Lungenfunktions‑Untersuchung hilft zu verstehen, wie gut Luft in die Lunge hinein‑ und herausströmt "
-            "und wie gut der Sauerstoff aus der Lunge in das Blut übergeht. "
-            "Das ist wichtig, weil Lungenerkrankungen Luftnot verursachen und gleichzeitig den Lungenkreislauf belasten können. "
-            "Mit den Ergebnissen kann die Behandlung besser angepasst werden."
-        ),
-    },
-    "P13": {
-        "title": "Eisenmangel / Blutarmut",
-        "text": (
-            "Ein Eisenmangel oder eine Blutarmut kann Müdigkeit, Schwäche und Luftnot verstärken – unabhängig vom Lungenkreislauf. "
-            "Darum werden entsprechende Blutwerte häufig gezielt geprüft. "
-            "Wenn ein Mangel vorliegt, kann eine Behandlung (zum Beispiel Eisengabe) die Leistungsfähigkeit verbessern. "
-            "Ihr Team bespricht mit Ihnen, welche Form der Therapie sinnvoll ist."
-        ),
-    },
+# -----------------------------
+# Basisbausteine (Absätze)
+# -----------------------------
+PATIENT_BLOCKS: Dict[str, PatientBlock] = {}
+
+def _add(id: str, title: str, template: str) -> None:
+    PATIENT_BLOCKS[id] = PatientBlock(id=id, title=title, template=template.strip())
+
+
+_add(
+    "PX_INTRO",
+    "Einleitung",
+    """
+Hallo {name},
+
+wir haben eine Herzkatheter-Untersuchung durchgeführt. Dabei messen wir, wie das Blut durch Herz und Lunge fließt und welche Drücke dabei entstehen.
+""",
+)
+
+_add(
+    "PX_WHAT_IS_PH",
+    "Was bedeutet Lungenhochdruck?",
+    """
+Wenn der Druck in den Blutgefäßen der Lunge zu hoch ist, muss die rechte Herzkammer stärker arbeiten. Das kann zu Luftnot, Müdigkeit und eingeschränkter Belastbarkeit führen.
+""",
+)
+
+_add(
+    "PX_NO_PH",
+    "Kein Lungenhochdruck in Ruhe",
+    """
+In Ruhe sind die Werte unauffällig. Das spricht gegen eine Lungenhochdruck-Erkrankung in Ruhe.
+Das bedeutet nicht automatisch, dass Ihre Beschwerden „eingebildet“ sind – es gibt mehrere mögliche Ursachen, die wir weiter einordnen.
+""",
+)
+
+_add(
+    "PX_EX_LEFT",
+    "Auffällige Belastungsreaktion – eher linkes Herz",
+    """
+In Ruhe waren die Werte unauffällig. Unter Belastung zeigte sich jedoch eine Reaktion, die eher dazu passt, dass das linke Herz unter Belastung „zu steif“ ist.
+Dadurch kann es zu einem Rückstau kommen, der auch die Lunge belastet.
+""",
+)
+
+_add(
+    "PX_EX_PVASC",
+    "Auffällige Belastungsreaktion – eher Lungengefäße",
+    """
+In Ruhe waren die Werte unauffällig. Unter Belastung zeigte sich jedoch eine auffällige Reaktion in den Lungengefäßen.
+Das kann erklären, warum Belastung (z.B. Treppen, längeres Gehen) schneller anstrengend wird.
+""",
+)
+
+_add(
+    "PX_PRECAP",
+    "Lungenhochdruck – v. a. Lungengefäße",
+    """
+Die Messwerte sprechen für eine Lungenhochdruck-Erkrankung, bei der vor allem der Widerstand in den Lungengefäßen erhöht ist.
+Wir ordnen das zusammen mit den anderen Untersuchungen ein, um die wahrscheinlichste Ursache zu finden.
+""",
+)
+
+_add(
+    "PX_POSTCAP",
+    "Lungenhochdruck – v. a. Rückstau vom linken Herzen",
+    """
+Die Messwerte sprechen für eine Lungenhochdruck-Erkrankung, die vor allem durch einen Rückstau vom linken Herzen mitbedingt ist.
+In solchen Fällen ist es wichtig, die Behandlung des linken Herzens und des Flüssigkeitshaushalts gut einzustellen.
+""",
+)
+
+_add(
+    "PX_CPCPH",
+    "Lungenhochdruck – Kombination",
+    """
+Die Messwerte sprechen für eine Kombination: Es gibt einen Rückstau vom linken Herzen und zusätzlich einen erhöhten Widerstand in den Lungengefäßen.
+Das braucht häufig eine besonders sorgfältige Planung der nächsten Schritte und Kontrollen.
+""",
+)
+
+_add(
+    "PX_BORDERLINE",
+    "Grenzbefund",
+    """
+Die Messwerte liegen in einem Grenzbereich oder sind nicht eindeutig. Das kommt vor.
+Dann schauen wir besonders auf Ihre Beschwerden, die Bildgebung und ggf. auf Tests unter Belastung oder nach Flüssigkeitsgabe.
+""",
+)
+
+_add(
+    "PX_GROUP2_HINT",
+    "Hinweis auf HFpEF/diastolische Komponente",
+    """
+Es gibt Hinweise, dass eine Form der Herzschwäche mit erhaltener Pumpkraft eine Rolle spielen könnte.
+Dabei ist nicht die „Kraft“ das Problem, sondern eher die Entspannung des Herzmuskels. Das wird kardiologisch weiter eingeordnet.
+""",
+)
+
+_add(
+    "PX_GROUP3_HINT",
+    "Hinweis auf Lungenerkrankung",
+    """
+Es gibt Hinweise, dass eine Lungenerkrankung oder eine niedrige Sauerstoffversorgung mitbeteiligt sein könnte.
+Dann sind Lungenfunktion, Bildgebung und ggf. eine spezialisierte Pneumologie-Mitbetreuung wichtig.
+""",
+)
+
+_add(
+    "PX_GROUP4_HINT",
+    "Hinweis auf frühere Blutgerinnsel",
+    """
+Es gibt Hinweise, dass frühere Blutgerinnsel in den Lungengefäßen beteiligt sein könnten.
+Dann empfehlen wir spezielle Untersuchungen, um das sicher zu klären und die besten Behandlungsmöglichkeiten zu prüfen.
+""",
+)
+
+_add(
+    "PX_ANEMIA",
+    "Blutarmut",
+    """
+Im Blutbild gibt es Hinweise auf eine Blutarmut. Das kann die Belastbarkeit deutlich beeinflussen und sollte gezielt abgeklärt werden.
+""",
+)
+
+_add(
+    "PX_CONGESTION",
+    "Wassereinlagerung/Rückstau",
+    """
+Es gibt Hinweise auf Wassereinlagerung oder Rückstau. Dann ist es wichtig, den Flüssigkeitshaushalt zu optimieren und Nierenwerte regelmäßig zu kontrollieren.
+""",
+)
+
+_add(
+    "PX_NEXT_STEPS",
+    "Wie geht es weiter?",
+    """
+Wir besprechen die Ergebnisse mit Ihnen und planen die nächsten Schritte. Das kann zusätzliche Diagnostik, eine Anpassung der Medikamente und Verlaufskontrollen beinhalten.
+Wenn neue oder starke Beschwerden auftreten (z.B. Ohnmacht, starke Luftnot, Brustschmerz), suchen Sie bitte zeitnah ärztliche Hilfe.
+""",
+)
+
+
+# -----------------------------
+# Bündel: welche Bausteine typischerweise zusammen ausgegeben werden
+# (nicht zwingend – die App kann zusätzlich dynamisch ergänzen)
+# -----------------------------
+PATIENT_BUNDLES: Dict[str, List[str]] = {
+    "K01": ["PX_INTRO", "PX_NO_PH", "PX_NEXT_STEPS"],
+    "K02": ["PX_INTRO", "PX_EX_LEFT", "PX_NEXT_STEPS"],
+    "K03": ["PX_INTRO", "PX_EX_PVASC", "PX_NEXT_STEPS"],
+    "K04": ["PX_INTRO", "PX_BORDERLINE", "PX_NEXT_STEPS"],
+    "K05": ["PX_INTRO", "PX_PRECAP", "PX_WHAT_IS_PH", "PX_NEXT_STEPS"],
+    "K06": ["PX_INTRO", "PX_PRECAP", "PX_WHAT_IS_PH", "PX_NEXT_STEPS"],
+    "K07": ["PX_INTRO", "PX_PRECAP", "PX_WHAT_IS_PH", "PX_NEXT_STEPS"],
+    "K11": ["PX_INTRO", "PX_PRECAP", "PX_GROUP4_HINT", "PX_NEXT_STEPS"],
+    "K12": ["PX_INTRO", "PX_PRECAP", "PX_NEXT_STEPS"],
+    "K13": ["PX_INTRO", "PX_PRECAP", "PX_GROUP3_HINT", "PX_NEXT_STEPS"],
+    "K14": ["PX_INTRO", "PX_POSTCAP", "PX_NEXT_STEPS"],
+    "K15": ["PX_INTRO", "PX_CPCPH", "PX_NEXT_STEPS"],
+    "K16": ["PX_INTRO", "PX_BORDERLINE", "PX_NEXT_STEPS"],
+    "K17": ["PX_INTRO", "PX_PRECAP", "PX_NEXT_STEPS"],
+    "K18": ["PX_INTRO", "PX_PRECAP", "PX_NEXT_STEPS"],
 }
+
+def get_patient_block(block_id: str) -> PatientBlock:
+    return PATIENT_BLOCKS[block_id]
